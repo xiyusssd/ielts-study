@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Countdown } from "@/components/assessment/countdown";
+import { Check, X } from "lucide-react";
 
 export function VocabTest({ questions }: { questions: VocabQ[] }) {
   const [idx, setIdx] = useState(0);
@@ -17,14 +18,15 @@ export function VocabTest({ questions }: { questions: VocabQ[] }) {
   const router = useRouter();
   const q = questions[idx];
   const done = Object.keys(answers).length;
-  const canSubmit = idx === questions.length - 1 && q.id in answers;
+  const correctCount = questions.filter((qq) => qq.id in answers && answers[qq.id] === qq.answer).length;
+  const answered = q.id in answers;
+  const isCorrect = answered && answers[q.id] === q.answer;
+  const canSubmit = idx === questions.length - 1 && answered;
 
   function pick(i: number) {
-    const next = { ...answers, [q.id]: i };
-    setAnswers(next);
-    setTimeout(() => {
-      if (idx < questions.length - 1) setIdx(idx + 1);
-    }, 150);
+    // 已作答则锁定，不允许改（保证判分真实）
+    if (answered || pending) return;
+    setAnswers({ ...answers, [q.id]: i });
   }
 
   function submit() {
@@ -44,7 +46,9 @@ export function VocabTest({ questions }: { questions: VocabQ[] }) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">词汇测试</h1>
-          <p className="text-sm text-muted-foreground">第 {idx + 1} / {questions.length} 题 · 已作答 {done}</p>
+          <p className="text-sm text-muted-foreground">
+            第 {idx + 1} / {questions.length} 题 · 已作答 {done} · 正确 {correctCount}
+          </p>
         </div>
         <Countdown minutes={8} onExpire={submit} />
       </div>
@@ -63,23 +67,65 @@ export function VocabTest({ questions }: { questions: VocabQ[] }) {
         <CardContent className="space-y-2">
           {q.options.map((opt, i) => {
             const picked = answers[q.id] === i;
+            const isAnswer = q.answer === i;
+            // 作答后：正确项一律标绿；错选项标红；未选未答项保持中性
+            let cls = "border-input";
+            let icon = null;
+            if (answered) {
+              if (isAnswer) {
+                cls = "border-green-500 bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300";
+                icon = <Check className="h-5 w-5 shrink-0 text-green-600" />;
+              } else if (picked) {
+                cls = "border-red-500 bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300";
+                icon = <X className="h-5 w-5 shrink-0 text-red-600" />;
+              } else {
+                cls = "border-input opacity-60";
+              }
+            } else if (picked) {
+              cls = "border-primary bg-primary/5";
+            }
             return (
               <button
                 key={i}
                 onClick={() => pick(i)}
-                disabled={pending}
+                disabled={answered || pending}
                 className={
-                  "w-full rounded-lg border p-3 text-left transition-colors hover:bg-muted " +
-                  (picked ? "border-primary bg-primary/5" : "")
+                  "flex w-full items-center gap-2 rounded-lg border p-3 text-left transition-colors " +
+                  (answered ? "cursor-default " : "hover:bg-muted ") +
+                  cls
                 }
               >
-                <span className="mr-2 font-mono text-muted-foreground">
+                <span className="mr-1 font-mono text-muted-foreground">
                   {String.fromCharCode(65 + i)}.
                 </span>
-                {opt}
+                <span className="flex-1">{opt}</span>
+                {icon}
               </button>
             );
           })}
+
+          {answered && (
+            <div
+              className={
+                "mt-3 flex items-center gap-2 rounded-lg p-3 text-sm font-medium " +
+                (isCorrect
+                  ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300"
+                  : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300")
+              }
+            >
+              {isCorrect ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  回答正确
+                </>
+              ) : (
+                <>
+                  <X className="h-4 w-4" />
+                  回答错误 · 正确答案是 {String.fromCharCode(65 + q.answer)}. {q.options[q.answer]}
+                </>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -94,7 +140,7 @@ export function VocabTest({ questions }: { questions: VocabQ[] }) {
         ) : (
           <Button
             onClick={() => setIdx(Math.min(questions.length - 1, idx + 1))}
-            disabled={idx === questions.length - 1}
+            disabled={idx === questions.length - 1 || !answered}
           >
             下一题
           </Button>
