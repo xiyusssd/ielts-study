@@ -1,5 +1,10 @@
 # 雅思学习助手
 
+[![CI](https://github.com/xiyusssd/ielts-study/actions/workflows/ci.yml/badge.svg)](https://github.com/xiyusssd/ielts-study/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org)
+[![PWA](https://img.shields.io/badge/PWA-installable-5A0FC8)](https://web.dev/progressive-web-apps/)
+
 AI 驱动的 IELTS 备考平台：5 维水平测试 → 个性化学习计划 → 5 大模块 (词汇 · 阅读 · 听力 · 写作 · 口语) 闭环训练。
 
 ## 快速开始
