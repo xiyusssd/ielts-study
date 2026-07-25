@@ -3,7 +3,11 @@ import { getEnv, providerReady } from "@/lib/env";
 import { listProviders } from "@/lib/ai";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, ArrowRight } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
+import { CheckCircle2, XCircle, ArrowRight, Settings as SettingsIcon, User } from "lucide-react";
+
+// 依赖运行时 env · 不 pre-render
+export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const env = getEnv();
@@ -17,11 +21,20 @@ export default async function SettingsPage() {
   ];
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold">设置</h1>
-        <p className="text-muted-foreground">AI Provider 切换 · 各能力可独立配置</p>
-      </div>
+    <div className="space-y-6 animate-in-slide">
+      <PageHeader
+        icon={SettingsIcon}
+        title="设置"
+        description="AI Provider 切换 · 各能力可独立配置"
+        gradient
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/settings/account">
+              <User className="h-4 w-4" /> 账户中心
+            </Link>
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader>
