@@ -1,0 +1,50 @@
+# deps
+node_modules
+.pnpm-store
+
+# next.js
+.next
+out
+next-env.d.ts
+
+# env / 密钥
+.env
+.env.local
+.env*.local
+
+# 数据库
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+prisma/dev.db*
+prisma/migrations/**/migration.sql.bak
+
+# 构建产物（app / dmg）
+dist/
+*.dmg
+
+# 备份
+backups/
+
+# content · 版权 & 用户自备
+content/cambridge-pdfs/
+content/parsed/
+content/audio/*.mp3
+content/audio/*.wav
+!content/audio/.gitkeep
+
+# 日志
+*.log
+dev.log
+npm-debug.log*
+pnpm-debug.log*
+
+# system
+.DS_Store
+
+# ide
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json

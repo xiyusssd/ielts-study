@@ -1,0 +1,243 @@
+// IELTS Study — Prisma Schema
+// dev: SQLite  |  prod: Postgres (只需切换 provider + DATABASE_URL)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============ 用户 ============
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  createdAt     DateTime  @default(now())
+  profile       Profile?
+  assessments   Assessment[]
+  plan          Plan?
+  vocabProgress VocabProgress[]
+  attempts      Attempt[]
+  writings      WritingSubmission[]
+  speakingLogs  SpeakingSession[]
+}
+
+model Profile {
+  userId          String    @id
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetOverall   Float?
+  targetListening Float?
+  targetReading   Float?
+  targetWriting   Float?
+  targetSpeaking  Float?
+  examDate        DateTime?
+  weeklyHours     Int?
+  currentBand     String?   // JSON: { listening, reading, writing, speaking, vocab }
+  updatedAt       DateTime  @updatedAt
+}
+
+// ============ 评估 ============
+model Assessment {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // initial | checkpoint
+  results   String   // JSON
+  bands     String   // JSON: { listening, reading, writing, speaking, vocab }
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// ============ 学习规划 ============
+model Plan {
+  id        String    @id @default(cuid())
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startDate DateTime
+  endDate   DateTime
+  weeks     WeekPlan[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model WeekPlan {
+  id        String     @id @default(cuid())
+  planId    String
+  plan      Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  weekIndex Int
+  focus     String     // JSON: { listening: hours, reading: hours, ... }
+  tasks     DailyTask[]
+
+  @@index([planId, weekIndex])
+}
+
+model DailyTask {
+  id          String    @id @default(cuid())
+  weekPlanId  String
+  weekPlan    WeekPlan  @relation(fields: [weekPlanId], references: [id], onDelete: Cascade)
+  date        DateTime
+  module      String    // vocab | reading | listening | writing | speaking
+  content     String    // JSON
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+
+  @@index([weekPlanId, date])
+}
+
+// ============ 词汇 ============
+model Word {
+  id           String @id @default(cuid())
+  spelling     String @unique
+  ipa          String?
+  translations String // JSON [{pos, meaning}]
+  examples     String // JSON [{en, zh}]
+  level        Int    // 3000/5000/7000/8500
+  tags         String // 逗号分隔
+  progress     VocabProgress[]
+}
+
+model VocabProgress {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wordId     String
+  word       Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  stability  Float    @default(0)
+  difficulty Float    @default(5)
+  dueAt      DateTime @default(now())
+  reps       Int      @default(0)
+  lapses     Int      @default(0)
+  lastGrade  Int?     // 0-4 (again/hard/good/easy/perfect)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, wordId])
+  @@index([userId, dueAt])
+}
+
+// ============ 阅读 / 听力题库 ============
+model Passage {
+  id         String     @id @default(cuid())
+  source     String     // cambridge-9-test-1-passage-1 | ai-<id>
+  module     String     // reading | listening
+  title      String
+  content    String
+  audioPath  String?
+  metadata   String     // JSON: {difficulty, wordCount, topics}
+  active     Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  questions  Question[]
+
+  @@index([module, active])
+}
+
+model Question {
+  id          String    @id @default(cuid())
+  passageId   String
+  passage     Passage   @relation(fields: [passageId], references: [id], onDelete: Cascade)
+  index       Int
+  type        String    // tfng | mcq | matching | gapfill | heading
+  prompt      String
+  options     String?   // JSON
+  answer      String    // JSON
+  explanation String?
+  attempts    Attempt[]
+
+  @@index([passageId, index])
+}
+
+model Attempt {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  passageId  String
+  questionId String?
+  question   Question? @relation(fields: [questionId], references: [id])
+  answers    String   // JSON: { [questionId]: userAnswer }
+  score      Float
+  band       Float?
+  duration   Int      // 秒
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// ============ 写作 ============
+model WritingPrompt {
+  id          String   @id @default(cuid())
+  task        String   // task1 | task2
+  category    String   // chart | line | pie | argument | discuss | ...
+  prompt      String
+  imageUrl    String?
+  minWords    Int      @default(250)
+  timeMinutes Int      @default(40)
+  active      Boolean  @default(true)
+  submissions WritingSubmission[]
+}
+
+model WritingSubmission {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promptId  String
+  prompt    WritingPrompt @relation(fields: [promptId], references: [id])
+  content   String
+  wordCount Int
+  duration  Int
+  scores    String        // JSON: {tr, cc, lr, gra, overall}
+  feedback  String        // JSON
+  provider  String?       // 记录批改用的 AI provider
+  model     String?
+  createdAt DateTime      @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// ============ 口语 ============
+model SpeakingPrompt {
+  id        String   @id @default(cuid())
+  part      Int      // 1 | 2 | 3
+  topic     String
+  question  String
+  followUps String?  // JSON
+  active    Boolean  @default(true)
+}
+
+model SpeakingSession {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  part       Int
+  promptIds  String   // JSON
+  transcript String   // JSON [{role, text, ts}]
+  audioPath  String?
+  scores     String   // JSON
+  feedback   String   // JSON
+  provider   String?
+  model      String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// ============ AI 调用日志（成本 / 排障）============
+model AILog {
+  id        String   @id @default(cuid())
+  userId    String?
+  provider  String
+  model     String
+  kind      String   // chat | tts | stt | realtime
+  purpose   String   // writing-grade | speaking-grade | content-gen | ...
+  inputTokens  Int?
+  outputTokens Int?
+  latencyMs Int?
+  ok        Boolean  @default(true)
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}

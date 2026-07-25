@@ -1,0 +1,67 @@
+{
+  "id": "/",
+  "name": "雅思学习助手",
+  "short_name": "雅思",
+  "description": "AI 驱动的 IELTS 备考平台 · 5 维水平诊断 · 个性化规划 · 5 大模块闭环",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "orientation": "any",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/icon",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-icon",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-icon",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "今日词汇",
+      "short_name": "词汇",
+      "description": "开始今日词汇队列",
+      "url": "/vocab/study",
+      "icons": [{ "src": "/apple-icon", "sizes": "180x180" }]
+    },
+    {
+      "name": "水平测试",
+      "short_name": "测试",
+      "description": "5 维水平诊断",
+      "url": "/assessment",
+      "icons": [{ "src": "/apple-icon", "sizes": "180x180" }]
+    },
+    {
+      "name": "写作训练",
+      "short_name": "写作",
+      "description": "Task 1/2 · AI 批改",
+      "url": "/writing",
+      "icons": [{ "src": "/apple-icon", "sizes": "180x180" }]
+    },
+    {
+      "name": "口语训练",
+      "short_name": "口语",
+      "description": "P1/P2/P3 · AI 考官",
+      "url": "/speaking",
+      "icons": [{ "src": "/apple-icon", "sizes": "180x180" }]
+    }
+  ],
+  "prefer_related_applications": false
+}

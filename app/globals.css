@@ -1,0 +1,174 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* 主色：清爽学术蓝紫渐变 */
+    --background: 0 0% 100%;
+    --foreground: 224 71% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71% 4%;
+
+    --primary: 243 75% 59%;
+    --primary-foreground: 210 20% 98%;
+    --primary-50: 238 100% 97%;
+    --primary-100: 243 91% 93%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 9% 20%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 262 83% 96%;
+    --accent-foreground: 262 83% 40%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 98%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 243 75% 59%;
+    --radius: 0.75rem;
+
+    /* 品牌渐变 */
+    --gradient-brand: linear-gradient(135deg, hsl(243 75% 59%) 0%, hsl(262 83% 58%) 100%);
+    --gradient-brand-soft: linear-gradient(135deg, hsl(243 91% 93%) 0%, hsl(262 83% 96%) 100%);
+  }
+
+  .dark {
+    --background: 224 71% 4%;
+    --foreground: 210 20% 98%;
+    --card: 224 71% 6%;
+    --card-foreground: 210 20% 98%;
+    --popover: 224 71% 6%;
+    --popover-foreground: 210 20% 98%;
+
+    --primary: 243 75% 65%;
+    --primary-foreground: 224 71% 4%;
+    --primary-50: 243 40% 15%;
+    --primary-100: 243 60% 20%;
+
+    --secondary: 215 27% 13%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 215 27% 13%;
+    --muted-foreground: 217 10% 65%;
+    --accent: 262 47% 18%;
+    --accent-foreground: 262 90% 85%;
+
+    --destructive: 0 63% 41%;
+    --destructive-foreground: 210 20% 98%;
+    --success: 142 61% 45%;
+    --warning: 38 92% 50%;
+
+    --border: 215 27% 15%;
+    --input: 215 27% 15%;
+    --ring: 243 75% 65%;
+
+    --gradient-brand: linear-gradient(135deg, hsl(243 75% 55%) 0%, hsl(262 83% 45%) 100%);
+    --gradient-brand-soft: linear-gradient(135deg, hsl(243 30% 15%) 0%, hsl(262 30% 18%) 100%);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
+      "Inter", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  }
+
+  /* 更好的中英混排 */
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.02em;
+  }
+
+  /* 数字用等宽 */
+  .font-mono, code, kbd, pre, samp {
+    font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace,
+      SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  /* 滚动条美化 */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted));
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
+
+  /* 减少动画（无障碍） */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .bg-brand-gradient {
+    background: var(--gradient-brand);
+  }
+  .bg-brand-soft {
+    background: var(--gradient-brand-soft);
+  }
+  .text-brand-gradient {
+    background: var(--gradient-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* 卡片悬浮效果 */
+  .card-hoverable {
+    @apply transition-all duration-200;
+  }
+  .card-hoverable:hover {
+    @apply -translate-y-0.5 shadow-lg;
+  }
+
+  /* 网格背景 */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--border) / 0.4) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border) / 0.4) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  /* 动画进入 */
+  .animate-in-fade {
+    animation: fadeIn 0.3s ease-out;
+  }
+  .animate-in-slide {
+    animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}

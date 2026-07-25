@@ -1,0 +1,36 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "file:/app/data/prod.db"
+      SESSION_SECRET: "${SESSION_SECRET}"
+      AI_TEXT_PROVIDER: "${AI_TEXT_PROVIDER:-openai}"
+      AI_VOICE_PROVIDER: "${AI_VOICE_PROVIDER:-openai}"
+      AI_STT_PROVIDER: "${AI_STT_PROVIDER:-openai}"
+      AI_REALTIME_PROVIDER: "${AI_REALTIME_PROVIDER:-openai}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+      OPENAI_TEXT_MODEL: "${OPENAI_TEXT_MODEL:-gpt-4o}"
+      OPENAI_TTS_MODEL: "${OPENAI_TTS_MODEL:-tts-1}"
+      OPENAI_STT_MODEL: "${OPENAI_STT_MODEL:-whisper-1}"
+      OPENAI_REALTIME_MODEL: "${OPENAI_REALTIME_MODEL:-gpt-4o-realtime-preview}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      ANTHROPIC_TEXT_MODEL: "${ANTHROPIC_TEXT_MODEL:-claude-sonnet-4-6}"
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
+      OLLAMA_TEXT_MODEL: "${OLLAMA_TEXT_MODEL:-qwen2.5:7b}"
+      NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
+    volumes:
+      - ./content:/app/content
+      - app-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  app-data:
