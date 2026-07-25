@@ -2,9 +2,15 @@ import { z } from "zod";
 
 const providerEnum = z.enum(["openai", "anthropic", "ollama"]);
 
+// build phase 时用宽松默认，避免 CI Docker build 因缺 .env 失败
+// 运行时（next start / dev）必须传真实值
+const IS_BUILD = process.env.NEXT_PHASE === "phase-production-build";
+
 const schema = z.object({
-  DATABASE_URL: z.string().min(1),
-  SESSION_SECRET: z.string().min(32, "SESSION_SECRET 至少 32 字节，用 openssl rand -base64 48 生成"),
+  DATABASE_URL: IS_BUILD ? z.string().default("file:./build-placeholder.db") : z.string().min(1),
+  SESSION_SECRET: IS_BUILD
+    ? z.string().default("build-time-placeholder-secret-not-for-runtime-use")
+    : z.string().min(32, "SESSION_SECRET 至少 32 字节，用 openssl rand -base64 48 生成"),
 
   AI_TEXT_PROVIDER: providerEnum.default("openai"),
   AI_VOICE_PROVIDER: z.enum(["openai"]).default("openai"),
@@ -42,7 +48,7 @@ export function getEnv(): Env {
   return cached;
 }
 
-// 各能力对应的凭据是否可用（用于运行时提示用户配置）
+/** 各能力对应的凭据是否可用 */
 export function providerReady(kind: "text" | "voice" | "stt" | "realtime"): boolean {
   const env = getEnv();
   const map: Record<typeof kind, string> = {
