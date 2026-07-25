@@ -49,3 +49,14 @@ pnpm-debug.log*
 !.vscode/settings.json
 !.vscode/extensions.json
 tsconfig.tsbuildinfo
+
+# 版权材料（剑桥真题 PDF/音频、词典）—— 仅本地用，绝不提交
+资料/
+*.mdx
+*.mdd
+
+# 打包产物
+dist/
+
+# 剑桥真题版权内容 —— 仅本地，绝不上传公开仓库
+public/audio/listening/c13-*.m4a

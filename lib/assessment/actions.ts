@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import {
   vocabBand,
+  estimateVocabSize,
   listeningReadingBand,
   writingBand,
   speakingBand,
@@ -14,11 +15,8 @@ import {
 } from "@/lib/scoring/band-mapper";
 import type { AssessmentResults, SectionName } from "@/lib/assessment/types";
 import { SECTIONS } from "@/lib/assessment/types";
-import {
-  VOCAB_QUESTIONS,
-  READING_QUESTIONS,
-  LISTENING_QUESTIONS,
-} from "@/lib/assessment/seed-data";
+import { getReadingSet, getListeningSet } from "@/lib/assessment/pools/pick";
+import { isCorrect } from "@/lib/assessment/pools/types";
 
 /** 找到用户当前在做的 assessment，没有就创建 */
 export async function getOrStartAssessment() {
@@ -46,66 +44,71 @@ export async function getOrStartAssessment() {
   return { assessment: created, results };
 }
 
-/** 提交词汇部分 */
-export async function submitVocab(answers: Record<string, number>) {
+/** 提交词汇部分（收下发的题目规格 + 答案，服务端按规格重判分）*/
+type VocabSpecItem = { id: string; level: number; answer: number };
+export async function submitVocab(payload: {
+  spec: VocabSpecItem[];
+  answers: Record<string, number>;
+}) {
+  const { spec, answers } = payload;
   const { assessment, results } = await getOrStartAssessment();
-  // 按 level 分组算正确率
   const byLevel: Record<number, { correct: number; total: number }> = {};
-  for (const q of VOCAB_QUESTIONS) {
-    byLevel[q.level] ??= { correct: 0, total: 0 };
-    byLevel[q.level].total++;
-    if (answers[q.id] === q.answer) byLevel[q.level].correct++;
+  for (const item of spec) {
+    byLevel[item.level] ??= { correct: 0, total: 0 };
+    byLevel[item.level].total++;
+    if (answers[item.id] === item.answer) byLevel[item.level].correct++;
   }
   const groups = Object.entries(byLevel).map(([k, v]) => ({ level: Number(k), ...v }));
   const band = vocabBand(groups);
+  const size = estimateVocabSize(groups);
   const rawStr: Record<string, string> = {};
   for (const [k, v] of Object.entries(answers)) rawStr[k] = String(v);
   results.sections.vocab = {
     submittedAt: new Date().toISOString(),
     answers: rawStr,
     score: band,
-    raw: { byLevel },
+    raw: { byLevel, size: size.size, sizeLow: size.low, sizeHigh: size.high },
   };
   await persist(assessment.id, results);
-  redirect("/assessment/listening");
+  redirect("/assessment/vocab/result");
 }
 
-/** 提交听力 */
-export async function submitListening(answers: Record<string, string>) {
+/** 提交听力（按抽中题集 value 判分）*/
+export async function submitListening(payload: { poolId: string; answers: Record<string, string> }) {
+  const { poolId, answers } = payload;
   const { assessment, results } = await getOrStartAssessment();
+  const set = getListeningSet(poolId);
+  const questions = set?.questions ?? [];
   let correct = 0;
-  for (const q of LISTENING_QUESTIONS) {
-    const user = (answers[q.id] ?? "").trim().toLowerCase();
-    if (user === q.answer.toLowerCase()) correct++;
-  }
-  const band = listeningReadingBand(correct, LISTENING_QUESTIONS.length);
+  for (const q of questions) if (isCorrect(answers[q.id], q.answer, q.accept)) correct++;
+  const band = listeningReadingBand(correct, questions.length);
   results.sections.listening = {
     submittedAt: new Date().toISOString(),
     answers,
     score: band,
-    raw: { correct, total: LISTENING_QUESTIONS.length },
+    raw: { correct, total: questions.length, poolId },
   };
   await persist(assessment.id, results);
-  redirect("/assessment/reading");
+  redirect("/assessment/listening/result");
 }
 
-/** 提交阅读 */
-export async function submitReading(answers: Record<string, string>) {
+/** 提交阅读（按抽中题集 value 判分）*/
+export async function submitReading(payload: { poolId: string; answers: Record<string, string> }) {
+  const { poolId, answers } = payload;
   const { assessment, results } = await getOrStartAssessment();
+  const set = getReadingSet(poolId);
+  const questions = set?.questions ?? [];
   let correct = 0;
-  for (const q of READING_QUESTIONS) {
-    const user = (answers[q.id] ?? "").trim().toUpperCase();
-    if (user === q.answer.toUpperCase()) correct++;
-  }
-  const band = listeningReadingBand(correct, READING_QUESTIONS.length);
+  for (const q of questions) if (isCorrect(answers[q.id], q.answer, q.accept)) correct++;
+  const band = listeningReadingBand(correct, questions.length);
   results.sections.reading = {
     submittedAt: new Date().toISOString(),
     answers,
     score: band,
-    raw: { correct, total: READING_QUESTIONS.length },
+    raw: { correct, total: questions.length, poolId },
   };
   await persist(assessment.id, results);
-  redirect("/assessment/writing");
+  redirect("/assessment/reading/result");
 }
 
 /** 提交写作（需要 AI 批改，若无 key 则给 5.5 默认分并标记） */

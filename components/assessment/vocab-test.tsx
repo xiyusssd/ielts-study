@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import type { VocabQ } from "@/lib/assessment/seed-data";
+import type { GenVocabQ } from "@/lib/assessment/vocab-types";
+import { NONE_OF_ABOVE } from "@/lib/assessment/vocab-types";
 import { submitVocab } from "@/lib/assessment/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,17 +11,18 @@ import { Progress } from "@/components/ui/progress";
 import { Countdown } from "@/components/assessment/countdown";
 import { Check, X } from "lucide-react";
 
-export function VocabTest({ questions }: { questions: VocabQ[] }) {
+export function VocabTest({ questions }: { questions: GenVocabQ[] }) {
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [pending, start] = useTransition();
-  const router = useRouter();
   const q = questions[idx];
   const done = Object.keys(answers).length;
   const correctCount = questions.filter((qq) => qq.id in answers && answers[qq.id] === qq.answer).length;
   const answered = q.id in answers;
   const isCorrect = answered && answers[q.id] === q.answer;
   const canSubmit = idx === questions.length - 1 && answered;
+  const pickedOpt = answered ? q.options[answers[q.id]] : null;
+  const correctOpt = q.options[q.answer];
 
   function pick(i: number) {
     // 已作答则锁定，不允许改（保证判分真实）
@@ -32,9 +33,10 @@ export function VocabTest({ questions }: { questions: VocabQ[] }) {
   function submit() {
     start(async () => {
       try {
-        await submitVocab(answers);
+        // 下发的题目规格（含答案键）随答案一起交回，服务端按规格重判分
+        const spec = questions.map((qq) => ({ id: qq.id, level: qq.level, answer: qq.answer }));
+        await submitVocab({ spec, answers });
       } catch (err) {
-        // redirect() 内部会 throw NEXT_REDIRECT — 忽略
         if ((err as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) return;
         toast.error("提交失败：" + (err as Error).message);
       }
@@ -57,8 +59,11 @@ export function VocabTest({ questions }: { questions: VocabQ[] }) {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-3xl">{q.prompt}</CardTitle>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="text-3xl">{q.word}</CardTitle>
+              {q.ipa && <p className="mt-1 text-sm text-muted-foreground">{q.ipa}</p>}
+            </div>
             <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
               Level {q.level}
             </span>
@@ -98,7 +103,7 @@ export function VocabTest({ questions }: { questions: VocabQ[] }) {
                 <span className="mr-1 font-mono text-muted-foreground">
                   {String.fromCharCode(65 + i)}.
                 </span>
-                <span className="flex-1">{opt}</span>
+                <span className="flex-1">{opt.text}</span>
                 {icon}
               </button>
             );
@@ -107,21 +112,30 @@ export function VocabTest({ questions }: { questions: VocabQ[] }) {
           {answered && (
             <div
               className={
-                "mt-3 flex items-center gap-2 rounded-lg p-3 text-sm font-medium " +
+                "mt-3 space-y-1 rounded-lg p-3 text-sm font-medium " +
                 (isCorrect
                   ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300"
                   : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300")
               }
             >
               {isCorrect ? (
-                <>
-                  <Check className="h-4 w-4" />
-                  回答正确
-                </>
+                <span className="flex items-center gap-2">
+                  <Check className="h-4 w-4" /> 回答正确
+                </span>
               ) : (
                 <>
-                  <X className="h-4 w-4" />
-                  回答错误 · 正确答案是 {String.fromCharCode(65 + q.answer)}. {q.options[q.answer]}
+                  <span className="flex items-center gap-2">
+                    <X className="h-4 w-4" />
+                    {correctOpt.text === NONE_OF_ABOVE
+                      ? "回答错误 · 正确答案是「以上都不正确」"
+                      : `回答错误 · 正确答案是 ${correctOpt.text}`}
+                  </span>
+                  {/* 干扰项归属：你选的那个释义其实属于哪个单词 */}
+                  {pickedOpt && pickedOpt.fromWord && pickedOpt.text !== NONE_OF_ABOVE && (
+                    <span className="block pl-6 text-xs opacity-90">
+                      你选的「{pickedOpt.text}」是 {pickedOpt.fromWord} 的意思
+                    </span>
+                  )}
                 </>
               )}
             </div>

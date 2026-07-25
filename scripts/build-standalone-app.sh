@@ -137,6 +137,8 @@ DATABASE_URL="file:$TEMPLATE_DB" ./node_modules/.bin/tsx scripts/seed-passages.t
 DATABASE_URL="file:$TEMPLATE_DB" ./node_modules/.bin/tsx scripts/seed-listening.ts 2>&1 | tail -2
 DATABASE_URL="file:$TEMPLATE_DB" ./node_modules/.bin/tsx scripts/seed-writing.ts 2>&1 | tail -2
 DATABASE_URL="file:$TEMPLATE_DB" ./node_modules/.bin/tsx scripts/seed-speaking.ts 2>&1 | tail -2
+# 剑桥真题 + VOA 真实内容(阅读/听力 study 模块)
+DATABASE_URL="file:$TEMPLATE_DB" ./node_modules/.bin/tsx scripts/seed-real-content.ts 2>&1 | tail -2
 
 # 复制模板到 .app
 cp "$TEMPLATE_DB" "$APP_DIR/Contents/Resources/template.db"

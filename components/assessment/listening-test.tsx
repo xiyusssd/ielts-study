@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import { toast } from "sonner";
-import type { ListeningQ } from "@/lib/assessment/seed-data";
+import type { PoolQ } from "@/lib/assessment/pools/types";
 import { submitListening } from "@/lib/assessment/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,13 +10,48 @@ import { Input } from "@/components/ui/input";
 import { Countdown } from "@/components/assessment/countdown";
 import { Play, Pause, Volume2 } from "lucide-react";
 
-export function ListeningTest({ script, questions }: { script: string; questions: ListeningQ[] }) {
+export function ListeningTest({
+  poolId,
+  title,
+  script,
+  questions,
+}: {
+  poolId: string;
+  title: string;
+  script: string;
+  questions: PoolQ[];
+}) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [playing, setPlaying] = useState(false);
   const [showScript, setShowScript] = useState(false);
+  const [hasAudioFile, setHasAudioFile] = useState(false);
   const [pending, start] = useTransition();
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioSrc = `/audio/listening/${poolId}.m4a`;
 
-  function playTTS() {
+  // 探测是否有预生成的清晰音频文件
+  useEffect(() => {
+    let alive = true;
+    fetch(audioSrc, { method: "HEAD" })
+      .then((r) => alive && setHasAudioFile(r.ok))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [audioSrc]);
+
+  function play() {
+    // 优先播放预生成的清晰音频；没有再退回浏览器 TTS
+    if (hasAudioFile && audioRef.current) {
+      if (playing) {
+        audioRef.current.pause();
+        setPlaying(false);
+      } else {
+        audioRef.current.play();
+        setPlaying(true);
+      }
+      return;
+    }
     if ("speechSynthesis" in window) {
       if (playing) {
         window.speechSynthesis.cancel();
@@ -39,7 +74,7 @@ export function ListeningTest({ script, questions }: { script: string; questions
   function submit() {
     start(async () => {
       try {
-        await submitListening(answers);
+        await submitListening({ poolId, answers });
       } catch (err) {
         if ((err as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) return;
         toast.error("提交失败：" + (err as Error).message);
@@ -60,13 +95,24 @@ export function ListeningTest({ script, questions }: { script: string; questions
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Volume2 className="h-5 w-5" /> 播放音频
+            <Volume2 className="h-5 w-5" /> {title}
           </CardTitle>
-          <CardDescription>使用浏览器 TTS 播报，可反复听。做完题再展开原文。</CardDescription>
+          <CardDescription>
+            {hasAudioFile ? "清晰音频，可反复听。" : "浏览器语音播报，可反复听。"}做完题再展开原文。
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {hasAudioFile && (
+            <audio
+              ref={audioRef}
+              src={audioSrc}
+              preload="none"
+              onEnded={() => setPlaying(false)}
+              className="hidden"
+            />
+          )}
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={playTTS} variant={playing ? "destructive" : "default"}>
+            <Button onClick={play} variant={playing ? "destructive" : "default"}>
               {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               {playing ? "停止" : "播放"}
             </Button>
@@ -94,11 +140,11 @@ export function ListeningTest({ script, questions }: { script: string; questions
                 <div className="space-y-2">
                   {q.options?.map((opt, oi) => {
                     const letter = String.fromCharCode(65 + oi);
-                    const picked = answers[q.id] === letter;
+                    const picked = answers[q.id] === opt; // 按选项文本存
                     return (
                       <button
                         key={oi}
-                        onClick={() => setAnswers({ ...answers, [q.id]: letter })}
+                        onClick={() => setAnswers({ ...answers, [q.id]: opt })}
                         className={
                           "block w-full rounded-md border p-2 text-left text-sm hover:bg-muted " +
                           (picked ? "border-primary bg-primary/5" : "")

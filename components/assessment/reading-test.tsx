@@ -2,20 +2,23 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import type { ReadingQ } from "@/lib/assessment/seed-data";
+import type { PoolQ } from "@/lib/assessment/pools/types";
 import { submitReading } from "@/lib/assessment/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Countdown } from "@/components/assessment/countdown";
 
 const TFNG_OPTIONS = ["TRUE", "FALSE", "NOT GIVEN"];
 
 export function ReadingTest({
+  poolId,
   passage,
   questions,
 }: {
+  poolId: string;
   passage: { title: string; content: string };
-  questions: ReadingQ[];
+  questions: PoolQ[];
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
@@ -23,7 +26,7 @@ export function ReadingTest({
   function submit() {
     start(async () => {
       try {
-        await submitReading(answers);
+        await submitReading({ poolId, answers });
       } catch (err) {
         if ((err as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) return;
         toast.error("提交失败：" + (err as Error).message);
@@ -75,15 +78,15 @@ export function ReadingTest({
                       );
                     })}
                   </div>
-                ) : (
+                ) : q.type === "mcq" ? (
                   <div className="space-y-1">
                     {q.options?.map((opt, oi) => {
                       const letter = String.fromCharCode(65 + oi);
-                      const picked = answers[q.id] === letter;
+                      const picked = answers[q.id] === opt; // 按选项文本存，判分免受顺序影响
                       return (
                         <button
                           key={oi}
-                          onClick={() => setAnswers({ ...answers, [q.id]: letter })}
+                          onClick={() => setAnswers({ ...answers, [q.id]: opt })}
                           className={
                             "block w-full rounded-md border p-2 text-left text-sm hover:bg-muted " +
                             (picked ? "border-primary bg-primary/5" : "")
@@ -95,6 +98,13 @@ export function ReadingTest({
                       );
                     })}
                   </div>
+                ) : (
+                  <Input
+                    value={answers[q.id] ?? ""}
+                    onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
+                    placeholder="填写答案"
+                    className="max-w-xs"
+                  />
                 )}
               </div>
             ))}

@@ -21,22 +21,69 @@ export function toBand(raw: number): number {
 }
 
 /**
- * 词汇：按用户在 4 个等级（3000/5000/7000/8500）的正确率估算。
- * 每级 8 题以内，等级正确率 x 该级对应 band 中点。
+ * 词汇 band：VST 频率带锚定。
+ * band ≈ 用户仍掌握（≥阈值正确率）的最高频率带对应 band，带间线性插值。
+ * 满分能到 8.5+，强弱可区分（旧的加权平均满分只有 6.5，有天花板 bug）。
+ * 频率带→band 锚点：3000→5.0, 5000→6.5, 7000→7.5, 8500→8.5。用猜测校正后正确率插值。
  */
+const VOCAB_LEVEL_BAND: Record<number, number> = { 3000: 5.0, 5000: 6.5, 7000: 7.5, 8500: 8.5 };
+const VOCAB_ORDER = [3000, 5000, 7000, 8500];
+const GUESS_BASELINE = 0.2; // 5 选 1
+
+/** 猜测校正：5 选项下随机≈20%，扣除后归一化 */
+function guessAdjust(acc: number): number {
+  return Math.max(0, (acc - GUESS_BASELINE) / (1 - GUESS_BASELINE));
+}
+
 export function vocabBand(byLevel: { level: number; correct: number; total: number }[]): number {
-  const targets: Record<number, number> = { 3000: 5.0, 5000: 6.0, 7000: 7.0, 8500: 8.0 };
-  let sum = 0;
-  let weight = 0;
+  const accByLevel: Record<number, number> = {};
   for (const g of byLevel) {
-    if (g.total === 0) continue;
-    const acc = g.correct / g.total;
-    const target = targets[g.level] ?? 6.0;
-    sum += acc * target * g.total;
-    weight += g.total;
+    if (g.total > 0) accByLevel[g.level] = guessAdjust(g.correct / g.total);
   }
-  if (weight === 0) return 0;
-  return toBand(sum / weight);
+  if (Object.keys(accByLevel).length === 0) return 0;
+
+  const MASTERY = 0.8; // 视为"掌握该带"的校正后正确率阈值
+  let band = 4.0; // 3000 带以下的地板
+  for (let i = 0; i < VOCAB_ORDER.length; i++) {
+    const lv = VOCAB_ORDER[i];
+    const acc = accByLevel[lv] ?? 0;
+    const anchor = VOCAB_LEVEL_BAND[lv];
+    const prevAnchor = i === 0 ? 4.0 : VOCAB_LEVEL_BAND[VOCAB_ORDER[i - 1]];
+    if (acc >= MASTERY) {
+      band = anchor; // 完全掌握该带，取锚点，继续看更高带
+    } else {
+      band = prevAnchor + (anchor - prevAnchor) * (acc / MASTERY); // 部分掌握：插值后停
+      break;
+    }
+  }
+  return toBand(band);
+}
+
+/** 频率带宽 + 词汇量估算（VST 频率带外推的近似，非官方精确值）*/
+const BAND_SPAN: Record<number, number> = { 3000: 1000, 5000: 2000, 7000: 2000, 8500: 1500 };
+const VOCAB_BASE = 2000;
+
+export function estimateVocabSize(
+  byLevel: { level: number; correct: number; total: number }[],
+): { size: number; low: number; high: number } {
+  const map = new Map(byLevel.map((g) => [g.level, g]));
+  let size = 0;
+  let variance = 0;
+  const b3 = map.get(3000);
+  const base3Acc = b3 && b3.total > 0 ? guessAdjust(b3.correct / b3.total) : 0;
+  size += VOCAB_BASE * base3Acc;
+  for (const lv of VOCAB_ORDER) {
+    const g = map.get(lv);
+    if (!g || g.total === 0) continue;
+    const rawAcc = g.correct / g.total;
+    const span = BAND_SPAN[lv];
+    size += guessAdjust(rawAcc) * span;
+    const p = Math.min(0.999, Math.max(0.001, rawAcc));
+    variance += Math.pow(span, 2) * ((p * (1 - p)) / g.total);
+  }
+  const sd = Math.sqrt(variance);
+  const round = (x: number) => Math.max(0, Math.round(x / 100) * 100);
+  return { size: round(size), low: round(size - sd), high: round(size + sd) };
 }
 
 /**
