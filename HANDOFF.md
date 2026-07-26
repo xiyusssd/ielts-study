@@ -1,4 +1,23 @@
-# 进度缓存 · 剑11+12 扩充(下次从这里继续)
+# ⭐ 最新状态(2026-07-26 晚) · 明天从这里看起
+
+**本轮全部完成并已提交(commit 4615ac7,未 push)**:
+1. 评估:修复重测清零 bug + 每模块可重测 + 手动填分跳过测试(/assessment/manual)
+2. 词汇:每日新词/复习量可配置(首页+计划页)+ 拼写模式(翻卡/拼写切换)+ 逐词回顾(测完显示单词释义)
+3. 单词发音:Piper 开源 TTS + LJSpeech 公有领域音色,5031词+75例句 m4a(零版权,可上架)。播放优先本地音频降级浏览器TTS
+- 全套回归通过(TSC + 9冒烟)。.app(399M,含音频)+ .dmg(226M) 已重打包同步。
+
+## 明天怎么用
+- **桌面 App**:双击 `dist/雅思学习助手.app`(或装 dmg)。首启从 template 初始化,自动补 schema 列/同步内容。跑在 127.0.0.1:3001。
+- **网页端开发**:`cd /Users/xiyu/Desktop/ai/雅思 && ./scripts/dev.sh` → http://localhost:3000。**必须用这个脚本**(系统 node 加载不了 prisma,见 memory)。
+- 测试账号(网页端 dev.db):`test@example.com` / `test1234`。桌面端是 `xiyu@qq.com`。
+- **重跑冒烟**:`~/.local/node22/bin/node scripts/smoke-<名>.mjs`(需 dev server 先起)。冒烟脚本:routes/vocab/audio/vocab-modes/vocab-review/manual/reassess/detail/assessment。
+- **重生成发音**(换机/新词):`python3 scripts/gen-word-audio.py`(需 `pip install piper-tts` + 模型 `~/.local/share/piper-voices/ljspeech.onnx`)。音频不进 git。
+- **AI 功能(写作批改/口语)**:App 未配 key(providers 全 false),要用在 `~/Library/Application Support/雅思学习助手/.env` 填 OPENAI_API_KEY。
+- ⚠️ 想推 GitHub:仓库 public,先走版权安全流程(cambridge/vocab-bank 三个 skip-worktree 文件),我没 push,等你发话。
+
+---
+
+# 进度缓存 · 剑11+12 扩充(历史任务,阅读扩充未做完)
 
 > 本轮任务:扩充剑桥11+12 真题(阅读24篇+听力8套),修打包遗留缺陷。
 > 记录到 2026-07-26,含**精确续做步骤**。只信工具真实返回值,别信 agent 谎报。
