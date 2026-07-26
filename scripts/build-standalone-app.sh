@@ -133,6 +133,8 @@ p.user.count().then(c => { console.log('  template init:', c, 'users'); return p
 
 # 用 tsx 跑真实 seed 脚本填充模板
 DATABASE_URL="file:$TEMPLATE_DB" ./node_modules/.bin/tsx scripts/seed-words.ts 2>&1 | tail -2
+# 从 vocab-bank 灌满复习库(5031 词 + 三维分类 tags)
+DATABASE_URL="file:$TEMPLATE_DB" ./node_modules/.bin/tsx scripts/seed-words-from-bank.ts 2>&1 | tail -2
 DATABASE_URL="file:$TEMPLATE_DB" ./node_modules/.bin/tsx scripts/seed-passages.ts 2>&1 | tail -2
 DATABASE_URL="file:$TEMPLATE_DB" ./node_modules/.bin/tsx scripts/seed-listening.ts 2>&1 | tail -2
 DATABASE_URL="file:$TEMPLATE_DB" ./node_modules/.bin/tsx scripts/seed-writing.ts 2>&1 | tail -2
