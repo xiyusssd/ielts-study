@@ -120,14 +120,10 @@ rm -f "$TEMPLATE_DB"
 # 用主项目的 prisma CLI 生成 schema
 DATABASE_URL="file:$TEMPLATE_DB" ./node_modules/.bin/prisma db push --skip-generate --schema=prisma/schema.prisma 2>&1 | tail -3
 
-# 用主项目的 seed 数据填充
-"$NODE_BIN" -e "
-const path = require('path');
-const { PrismaClient } = require('$PWD/node_modules/.pnpm/@prisma+client@6.19.3_prisma@6.19.3_typescript@5.9.3__typescript@5.9.3/node_modules/@prisma/client');
-process.env.DATABASE_URL = 'file:$TEMPLATE_DB';
-delete require.cache;
-const { PrismaClient: PC } = require('$PWD/node_modules/.pnpm/@prisma+client@6.19.3_prisma@6.19.3_typescript@5.9.3__typescript@5.9.3/node_modules/@prisma/client');
-const p = new PC();
+# schema 健全性检查（动态定位 prisma client，避免硬编码 pnpm 版本路径）
+DATABASE_URL="file:$TEMPLATE_DB" "$NODE_BIN" -e "
+const { PrismaClient } = require(require.resolve('@prisma/client', { paths: [process.cwd()] }));
+const p = new PrismaClient();
 p.user.count().then(c => { console.log('  template init:', c, 'users'); return p.\$disconnect(); });
 " 2>&1 | tail -2
 

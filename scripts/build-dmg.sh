@@ -20,7 +20,7 @@ ok()  { printf "\033[32m✓\033[0m %s\n" "$*"; }
 # 确保 .app 存在
 if [ ! -d "$APP_DIR" ]; then
   log ".app 不存在，先构建"
-  ./scripts/build-macos-app.sh
+  ./scripts/build-standalone-app.sh
 fi
 
 # 清理旧的
