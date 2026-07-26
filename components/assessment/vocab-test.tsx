@@ -8,8 +8,14 @@ import { submitVocab } from "@/lib/assessment/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import { Countdown } from "@/components/assessment/countdown";
 import { Check, X } from "lucide-react";
+
+const POS_LABELS: Record<string, string> = {
+  noun: "名词", verb: "动词", adj: "形容词", adv: "副词",
+  prep: "介词", conj: "连词", pron: "代词", art: "冠词", int: "感叹词", num: "数词",
+};
 
 export function VocabTest({ questions }: { questions: GenVocabQ[] }) {
   const [idx, setIdx] = useState(0);
@@ -57,16 +63,20 @@ export function VocabTest({ questions }: { questions: GenVocabQ[] }) {
 
       <Progress value={(done / questions.length) * 100} />
 
-      <Card>
+      <Card key={q.id} className="animate-in-slide">
         <CardHeader>
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle className="text-3xl">{q.word}</CardTitle>
-              {q.ipa && <p className="mt-1 text-sm text-muted-foreground">{q.ipa}</p>}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {q.ipa && <span className="font-mono text-sm text-muted-foreground">{q.ipa}</span>}
+                {q.pos && <Badge variant="secondary">{POS_LABELS[q.pos] ?? q.pos}</Badge>}
+              </div>
             </div>
-            <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              Level {q.level}
-            </span>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              {q.cefr && <Badge variant="outline">{q.cefr}</Badge>}
+              <Badge variant="secondary">Lv {q.level}</Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -78,11 +88,11 @@ export function VocabTest({ questions }: { questions: GenVocabQ[] }) {
             let icon = null;
             if (answered) {
               if (isAnswer) {
-                cls = "border-green-500 bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300";
-                icon = <Check className="h-5 w-5 shrink-0 text-green-600" />;
+                cls = "border-success bg-success/10 text-success";
+                icon = <Check className="h-5 w-5 shrink-0 text-success" />;
               } else if (picked) {
-                cls = "border-red-500 bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300";
-                icon = <X className="h-5 w-5 shrink-0 text-red-600" />;
+                cls = "border-destructive bg-destructive/10 text-destructive";
+                icon = <X className="h-5 w-5 shrink-0 text-destructive" />;
               } else {
                 cls = "border-input opacity-60";
               }
@@ -113,9 +123,7 @@ export function VocabTest({ questions }: { questions: GenVocabQ[] }) {
             <div
               className={
                 "mt-3 space-y-1 rounded-lg p-3 text-sm font-medium " +
-                (isCorrect
-                  ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300"
-                  : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300")
+                (isCorrect ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive")
               }
             >
               {isCorrect ? (

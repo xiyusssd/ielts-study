@@ -6,8 +6,17 @@ import {
 } from "@/lib/assessment/vocab-types";
 import bankData from "@/lib/assessment/data/vocab-bank.json";
 
-/** 打包词库（ECDICT 开源，MIT，真实 COCA 词频分级）*/
-type BankWord = { word: string; ipa: string | null; level: number; meaning: string };
+/** 打包词库（ECDICT 开源，真实 COCA 词频分级 + 三维分类）*/
+type BankWord = {
+  word: string;
+  ipa: string | null;
+  level: number;
+  meaning: string;
+  pos?: string | null;
+  cefr?: string | null;
+  sources?: string[];
+  topics?: string[];
+};
 const BANK = bankData as BankWord[];
 
 /** 每级抽题数（等量，避免加权失衡）*/
@@ -93,6 +102,8 @@ export function generateVocabQuestions(): GenVocabQ[] {
         level: level,
         word: target.word,
         ipa: target.ipa,
+        pos: target.pos ?? null,
+        cefr: target.cefr ?? null,
         options,
         answer,
       });

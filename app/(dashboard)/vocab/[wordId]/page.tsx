@@ -4,8 +4,31 @@ import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Volume2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft } from "lucide-react";
 import { WordTTS } from "@/components/vocab/word-tts";
+
+const SOURCE_LABELS: Record<string, string> = {
+  ielts: "雅思", toefl: "托福", gre: "GRE", cet4: "四级", cet6: "六级",
+  kaoyan: "考研", gaokao: "高考", zhongkao: "中考", awl: "学术词AWL",
+};
+const TOPIC_LABELS: Record<string, string> = {
+  education: "教育", environment: "环境", technology: "科技", health: "健康",
+  business: "商业", history_culture: "历史文化", nature: "自然", psychology: "心理",
+  city_transport: "城市交通", art: "艺术", society: "社会", science: "科学",
+};
+
+/** 解析 Word.tags("ielts,cet6,t:environment,cefr:B2") 为三维标签 */
+function parseTags(tags: string) {
+  const sources: string[] = [], topics: string[] = [];
+  let cefr: string | null = null;
+  for (const tok of (tags || "").split(",").map((s) => s.trim()).filter(Boolean)) {
+    if (tok.startsWith("t:")) topics.push(tok.slice(2));
+    else if (tok.startsWith("cefr:")) cefr = tok.slice(5);
+    else sources.push(tok);
+  }
+  return { sources, topics, cefr };
+}
 
 export default async function WordDetailPage({ params }: { params: Promise<{ wordId: string }> }) {
   const user = await requireUser();
@@ -20,6 +43,7 @@ export default async function WordDetailPage({ params }: { params: Promise<{ wor
 
   const translations = JSON.parse(word.translations) as { pos: string; meaning: string }[];
   const examples = JSON.parse(word.examples) as { en: string; zh: string }[];
+  const { sources, topics, cefr } = parseTags(word.tags);
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -34,10 +58,16 @@ export default async function WordDetailPage({ params }: { params: Promise<{ wor
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-4xl">{word.spelling}</CardTitle>
-              <div className="mt-2 flex items-center gap-3 text-muted-foreground">
-                {word.ipa && <span>{word.ipa}</span>}
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-muted-foreground">
+                {word.ipa && <span className="font-mono">{word.ipa}</span>}
                 <WordTTS text={word.spelling} />
-                <span className="rounded bg-muted px-2 py-0.5 text-xs">Level {word.level}</span>
+                {cefr && <Badge variant="outline">{cefr}</Badge>}
+                {sources.map((s) => (
+                  <Badge key={s} variant="default">{SOURCE_LABELS[s] ?? s}</Badge>
+                ))}
+                {topics.map((t) => (
+                  <Badge key={t} variant="secondary">{TOPIC_LABELS[t] ?? t}</Badge>
+                ))}
               </div>
             </div>
           </div>

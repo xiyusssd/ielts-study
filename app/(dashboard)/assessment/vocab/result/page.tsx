@@ -6,7 +6,15 @@ import { bandFeedback } from "@/lib/scoring/band-mapper";
 import type { AssessmentResults } from "@/lib/assessment/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ArrowRight, BookOpen } from "lucide-react";
+
+/** 正确率 → 颜色分级：高绿 / 中黄 / 低红 */
+function accentFor(pct: number): { bar: string; text: string } {
+  if (pct >= 70) return { bar: "bg-success", text: "text-success" };
+  if (pct >= 40) return { bar: "bg-[hsl(var(--warning))]", text: "text-[hsl(var(--warning))]" };
+  return { bar: "bg-destructive", text: "text-destructive" };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +75,14 @@ export default async function VocabResultPage() {
             <CardDescription>词汇水平 (IELTS)</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">Band {band || "—"}</div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold">Band {band || "—"}</span>
+              {band > 0 && (
+                <Badge variant={band >= 7 ? "success" : band >= 5.5 ? "default" : "warning"}>
+                  {band >= 7 ? "优秀" : band >= 5.5 ? "良好" : "待提升"}
+                </Badge>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -82,14 +97,15 @@ export default async function VocabResultPage() {
             const total = g?.total ?? 0;
             const correct = g?.correct ?? 0;
             const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
+            const ac = accentFor(pct);
             return (
               <div key={lv} className="flex items-center gap-3">
                 <span className="w-28 shrink-0 text-sm text-muted-foreground">{LEVEL_LABEL[lv]}</span>
-                <div className="h-2 flex-1 overflow-hidden rounded bg-muted">
-                  <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div className={`h-full rounded-full transition-all ${ac.bar}`} style={{ width: `${pct}%` }} />
                 </div>
-                <span className="w-16 shrink-0 text-right text-sm tabular-nums">
-                  {correct}/{total}
+                <span className={`w-20 shrink-0 text-right text-sm font-medium tabular-nums ${total > 0 ? ac.text : "text-muted-foreground"}`}>
+                  {correct}/{total} · {pct}%
                 </span>
               </div>
             );

@@ -13,6 +13,8 @@ export type GenVocabQ = {
   level: VocabLevel;
   word: string;
   ipa: string | null;
+  pos?: string | null; // 词性(noun/verb/adj...)，展示用
+  cefr?: string | null; // CEFR 难度带(A1-C2)，展示用
   options: VocabOption[]; // 含末尾的「以上都不正确」
   answer: number; // 正确选项下标
 };

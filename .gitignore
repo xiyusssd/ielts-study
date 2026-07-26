@@ -59,4 +59,8 @@ tsconfig.tsbuildinfo
 dist/
 
 # 剑桥真题版权内容 —— 仅本地，绝不上传公开仓库
-public/audio/listening/c13-*.m4a
+public/audio/listening/c1[3-6]-*.m4a
+
+# Python 缓存
+scripts/__pycache__/
+__pycache__/

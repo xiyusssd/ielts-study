@@ -4,8 +4,20 @@ import { prisma } from "@/lib/db";
 import { generateDailyQueue } from "@/lib/srs/queue";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
-import { ArrowRight, BookMarked, Flame, TrendingUp, Languages } from "lucide-react";
+import { ArrowRight, BookMarked, Flame, TrendingUp, Languages, Layers, Tag } from "lucide-react";
+
+const SOURCE_LABELS: Record<string, string> = {
+  ielts: "雅思", toefl: "托福", gre: "GRE", cet4: "四级", cet6: "六级",
+  kaoyan: "考研", gaokao: "高考", zhongkao: "中考", awl: "学术词AWL",
+};
+const TOPIC_LABELS: Record<string, string> = {
+  education: "教育", environment: "环境", technology: "科技", health: "健康",
+  business: "商业", history_culture: "历史文化", nature: "自然", psychology: "心理",
+  city_transport: "城市交通", art: "艺术", society: "社会", science: "科学",
+};
+const SOURCE_ORDER = ["ielts", "toefl", "cet6", "cet4", "gre", "awl", "kaoyan", "gaokao"];
 
 export default async function VocabPage() {
   const user = await requireUser();
@@ -31,6 +43,16 @@ export default async function VocabPage() {
   const totalToStudy = queue.dueList.length + queue.newList.length;
   const dailyGoal = 20;
   const donePct = Math.min(100, Math.round(((dailyGoal - queue.newList.length) / dailyGoal) * 100));
+
+  // 分类计数：按来源(裸 token)与话题(t: 前缀)统计词库覆盖，供分类学习入口
+  const srcCounts = await Promise.all(
+    SOURCE_ORDER.map(async (s) => ({ key: s, n: await prisma.word.count({ where: { tags: { contains: s } } }) })),
+  );
+  const topicCounts = await Promise.all(
+    Object.keys(TOPIC_LABELS).map(async (t) => ({ key: t, n: await prisma.word.count({ where: { tags: { contains: `t:${t}` } } }) })),
+  );
+  const sources = srcCounts.filter((x) => x.n > 0);
+  const topics = topicCounts.filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
 
   return (
     <div className="space-y-6 animate-in-slide">
@@ -123,6 +145,53 @@ export default async function VocabPage() {
           </CardContent>
         </Card>
       </div>
+
+      {(sources.length > 0 || topics.length > 0) && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Layers className="h-4 w-4 text-primary" />
+              按分类学习
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {sources.length > 0 && (
+              <div>
+                <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <BookMarked className="h-3.5 w-3.5" /> 词汇书
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {sources.map((s) => (
+                    <Link key={s.key} href={`/vocab/study?source=${s.key}`}>
+                      <Badge variant="default" className="cursor-pointer hover:bg-primary/20">
+                        {SOURCE_LABELS[s.key] ?? s.key}
+                        <span className="ml-1 opacity-60">{s.n}</span>
+                      </Badge>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+            {topics.length > 0 && (
+              <div>
+                <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <Tag className="h-3.5 w-3.5" /> 雅思话题
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {topics.map((t) => (
+                    <Link key={t.key} href={`/vocab/study?topic=${t.key}`}>
+                      <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/70">
+                        {TOPIC_LABELS[t.key] ?? t.key}
+                        <span className="ml-1 opacity-60">{t.n}</span>
+                      </Badge>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
