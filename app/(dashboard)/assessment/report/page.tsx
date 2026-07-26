@@ -6,7 +6,7 @@ import { bandFeedback, type Bands } from "@/lib/scoring/band-mapper";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BandRadar } from "@/components/charts/band-radar";
-import { ArrowRight, Target } from "lucide-react";
+import { ArrowRight, Target, RotateCcw } from "lucide-react";
 
 const LABELS: Record<keyof Bands, string> = {
   vocab: "词汇量",
@@ -28,11 +28,19 @@ export default async function ReportPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">你的水平报告</h1>
-        <p className="text-muted-foreground">
-          基于 5 段诊断测试的估算结果（AI 辅助评分，非官方精确分数）
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold">你的水平报告</h1>
+          <p className="text-muted-foreground">
+            基于 5 段诊断测试的估算结果（AI 辅助评分，非官方精确分数）
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link href="/assessment">
+            <RotateCcw className="h-4 w-4" />
+            返回评估 · 重测模块
+          </Link>
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

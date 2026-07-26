@@ -18,7 +18,11 @@ import { SECTIONS } from "@/lib/assessment/types";
 import { getReadingSet, getListeningSet } from "@/lib/assessment/pools/pick";
 import { isCorrect } from "@/lib/assessment/pools/types";
 
-/** 找到用户当前在做的 assessment，没有就创建 */
+/**
+ * 拿到用户"当前这一份"评估：总是复用最新一份（不管是否已完成），没有才新建。
+ * 这样单独重测某个模块时，是在同一份评估上覆盖更新该模块，不会把其它模块清零。
+ * 想从零重测全部，用 startFreshAssessment()。
+ */
 export async function getOrStartAssessment() {
   const user = (await requireUser())!;
   const latest = await prisma.assessment.findFirst({
@@ -27,15 +31,19 @@ export async function getOrStartAssessment() {
   });
   if (latest) {
     const results = JSON.parse(latest.results) as AssessmentResults;
-    if (!results.completedAt) return { assessment: latest, results };
+    return { assessment: latest, results };
   }
+  return createEmptyAssessment(user.id);
+}
+
+async function createEmptyAssessment(userId: string) {
   const results: AssessmentResults = {
     startedAt: new Date().toISOString(),
     sections: {},
   };
   const created = await prisma.assessment.create({
     data: {
-      userId: user.id,
+      userId,
       type: "initial",
       results: JSON.stringify(results),
       bands: JSON.stringify({ vocab: 0, listening: 0, reading: 0, writing: 0, speaking: 0 }),
@@ -44,8 +52,44 @@ export async function getOrStartAssessment() {
   return { assessment: created, results };
 }
 
+/** 从零开始一份全新评估（"重新测全部"入口用），然后回到评估首页。 */
+export async function startFreshAssessment() {
+  const user = (await requireUser())!;
+  await createEmptyAssessment(user.id);
+  revalidatePath("/assessment");
+  redirect("/assessment");
+}
+
+/**
+ * 手动填写自己的雅思分数，跳过测试。
+ * 把 5 维分数直接写成一份完整评估（标记 manual），设 completedAt，同步 profile，进报告。
+ */
+export async function submitManualBands(payload: {
+  vocab: number;
+  listening: number;
+  reading: number;
+  writing: number;
+  speaking: number;
+}) {
+  const { assessment, results } = await getOrStartAssessment();
+  const now = new Date().toISOString();
+  const clamp = (n: number) => Math.max(0, Math.min(9, Math.round(n * 2) / 2));
+  for (const s of SECTIONS) {
+    const score = clamp(Number(payload[s]) || 0);
+    results.sections[s] = {
+      submittedAt: now,
+      answers: {} as never,
+      score,
+      raw: { manual: true },
+    };
+  }
+  await persist(assessment.id, assessment.userId, results);
+  revalidatePath("/");
+  redirect("/assessment/report");
+}
+
 /** 提交词汇部分（收下发的题目规格 + 答案，服务端按规格重判分）*/
-type VocabSpecItem = { id: string; level: number; answer: number };
+type VocabSpecItem = { id: string; level: number; answer: number; word: string; meaning: string };
 export async function submitVocab(payload: {
   spec: VocabSpecItem[];
   answers: Record<string, number>;
@@ -53,10 +97,21 @@ export async function submitVocab(payload: {
   const { spec, answers } = payload;
   const { assessment, results } = await getOrStartAssessment();
   const byLevel: Record<number, { correct: number; total: number }> = {};
+  // 逐词回顾：单词 + 真实释义 + 对错（结果页展示，让用户知道每个词什么意思）
+  const review: {
+    word: string;
+    meaning: string;
+    level: number;
+    ok: boolean;
+    answered: boolean;
+  }[] = [];
   for (const item of spec) {
     byLevel[item.level] ??= { correct: 0, total: 0 };
     byLevel[item.level].total++;
-    if (answers[item.id] === item.answer) byLevel[item.level].correct++;
+    const answered = item.id in answers;
+    const ok = answers[item.id] === item.answer;
+    if (ok) byLevel[item.level].correct++;
+    review.push({ word: item.word, meaning: item.meaning, level: item.level, ok, answered });
   }
   const groups = Object.entries(byLevel).map(([k, v]) => ({ level: Number(k), ...v }));
   const band = vocabBand(groups);
@@ -67,9 +122,9 @@ export async function submitVocab(payload: {
     submittedAt: new Date().toISOString(),
     answers: rawStr,
     score: band,
-    raw: { byLevel, size: size.size, sizeLow: size.low, sizeHigh: size.high },
+    raw: { byLevel, size: size.size, sizeLow: size.low, sizeHigh: size.high, review },
   };
-  await persist(assessment.id, results);
+  await persist(assessment.id, assessment.userId, results);
   redirect("/assessment/vocab/result");
 }
 
@@ -88,7 +143,7 @@ export async function submitListening(payload: { poolId: string; answers: Record
     score: band,
     raw: { correct, total: questions.length, poolId },
   };
-  await persist(assessment.id, results);
+  await persist(assessment.id, assessment.userId, results);
   redirect("/assessment/listening/result");
 }
 
@@ -107,7 +162,7 @@ export async function submitReading(payload: { poolId: string; answers: Record<s
     score: band,
     raw: { correct, total: questions.length, poolId },
   };
-  await persist(assessment.id, results);
+  await persist(assessment.id, assessment.userId, results);
   redirect("/assessment/reading/result");
 }
 
@@ -140,7 +195,7 @@ export async function submitWriting(payload: { content: string; wordCount: numbe
     score: band,
     raw: { scores, feedback, usedAI },
   };
-  await persist(assessment.id, results);
+  await persist(assessment.id, assessment.userId, results);
   redirect("/assessment/speaking");
 }
 
@@ -174,24 +229,18 @@ export async function submitSpeaking(payload: { transcript: string; skipped?: bo
     score: band,
     raw: { scores, feedback, usedAI },
   };
-  results.completedAt = new Date().toISOString();
-  const bands = computeBands(results);
-  await prisma.assessment.update({
-    where: { id: assessment.id },
-    data: {
-      results: JSON.stringify(results),
-      bands: JSON.stringify(bands),
-    },
-  });
-  await prisma.profile.update({
-    where: { userId: assessment.userId },
-    data: { currentBand: JSON.stringify(bands) },
-  });
+  await persist(assessment.id, assessment.userId, results);
   revalidatePath("/");
   redirect("/assessment/report");
 }
 
-async function persist(assessmentId: string, results: AssessmentResults) {
+/**
+ * 落盘一段结果：重算 bands、5 段齐全则补 completedAt、同步 profile.currentBand。
+ * 任何模块（含重测）提交后都会刷新 profile，保证首页/报告用的是最新分数。
+ */
+async function persist(assessmentId: string, userId: string, results: AssessmentResults) {
+  const allDone = SECTIONS.every((s) => results.sections[s]?.submittedAt);
+  if (allDone && !results.completedAt) results.completedAt = new Date().toISOString();
   const bands = computeBands(results);
   await prisma.assessment.update({
     where: { id: assessmentId },
@@ -199,6 +248,10 @@ async function persist(assessmentId: string, results: AssessmentResults) {
       results: JSON.stringify(results),
       bands: JSON.stringify(bands),
     },
+  });
+  await prisma.profile.update({
+    where: { userId },
+    data: { currentBand: JSON.stringify(bands) },
   });
 }
 

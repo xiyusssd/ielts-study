@@ -6,6 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { GRADE_LABELS, type Grade } from "@/lib/srs/fsrs";
 import { reviewWord } from "@/lib/vocab/actions";
+import { playWord } from "@/lib/audio/play";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -59,13 +60,7 @@ export function StudyCard({ items, remaining }: { items: Item[]; remaining: numb
   const progress = (idx / items.length) * 100;
 
   function playTTS() {
-    if ("speechSynthesis" in window) {
-      const u = new SpeechSynthesisUtterance(item.word.spelling);
-      u.lang = "en-US";
-      u.rate = 0.9;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
-    }
+    playWord(item.word.spelling);
   }
 
   function grade(g: Grade) {

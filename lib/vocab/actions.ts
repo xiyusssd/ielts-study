@@ -5,6 +5,22 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { schedule, type Grade } from "@/lib/srs/fsrs";
 
+/** 保存用户的每日词量偏好（新词 / 复习上限）*/
+export async function saveDailyGoals(input: { newWords: number; reviewWords: number }) {
+  const user = await requireUser();
+  if (!user) return { ok: false as const, error: "未登录" };
+  const clampNew = Math.max(0, Math.min(200, Math.round(input.newWords)));
+  const clampReview = Math.max(0, Math.min(500, Math.round(input.reviewWords)));
+  await prisma.profile.update({
+    where: { userId: user.id },
+    data: { dailyNewWords: clampNew, dailyReviewWords: clampReview },
+  });
+  revalidatePath("/vocab");
+  revalidatePath("/vocab/study");
+  revalidatePath("/plan");
+  return { ok: true as const };
+}
+
 /** 用户对一张卡的评分 → 更新 SRS 状态 */
 export async function reviewWord(input: { wordId: string; grade: Grade }) {
   const user = await requireUser();

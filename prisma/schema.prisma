@@ -36,6 +36,8 @@ model Profile {
   examDate        DateTime?
   weeklyHours     Int?
   currentBand     String?   // JSON: { listening, reading, writing, speaking, vocab }
+  dailyNewWords   Int?      // 每日新词上限（用户可调，默认 20）
+  dailyReviewWords Int?     // 每日复习上限（用户可调，默认 100）
   updatedAt       DateTime  @updatedAt
 }
 

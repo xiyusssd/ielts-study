@@ -39,8 +39,14 @@ export function VocabTest({ questions }: { questions: GenVocabQ[] }) {
   function submit() {
     start(async () => {
       try {
-        // 下发的题目规格（含答案键）随答案一起交回，服务端按规格重判分
-        const spec = questions.map((qq) => ({ id: qq.id, level: qq.level, answer: qq.answer }));
+        // 下发的题目规格（含答案键 + 单词释义）随答案一起交回，服务端按规格重判分并存逐词回顾
+        const spec = questions.map((qq) => ({
+          id: qq.id,
+          level: qq.level,
+          answer: qq.answer,
+          word: qq.word,
+          meaning: qq.meaning,
+        }));
         await submitVocab({ spec, answers });
       } catch (err) {
         if ((err as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) return;

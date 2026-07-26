@@ -59,7 +59,12 @@ tsconfig.tsbuildinfo
 dist/
 
 # 剑桥真题版权内容 —— 仅本地，绝不上传公开仓库
-public/audio/listening/c1[3-6]-*.m4a
+public/audio/listening/c1[1-6]-*.m4a
+public/audio/listening/c[4-9]-*.m4a
+
+# 单词/例句发音（Piper 本地生成，体积大不进 git；打包时随 public 进 .app，或重跑 gen-word-audio.py）
+public/audio/words/
+public/audio/sentences/
 
 # Python 缓存
 scripts/__pycache__/

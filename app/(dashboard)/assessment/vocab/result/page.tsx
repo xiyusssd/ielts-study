@@ -7,7 +7,7 @@ import type { AssessmentResults } from "@/lib/assessment/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, BookOpen } from "lucide-react";
+import { ArrowRight, BookOpen, Check, X } from "lucide-react";
 
 /** 正确率 → 颜色分级：高绿 / 中黄 / 低红 */
 function accentFor(pct: number): { bar: string; text: string } {
@@ -43,8 +43,10 @@ export default async function VocabResultPage() {
     size?: number;
     sizeLow?: number;
     sizeHigh?: number;
+    review?: { word: string; meaning: string; level: number; ok: boolean; answered: boolean }[];
   };
   const byLevel = raw.byLevel ?? {};
+  const review = raw.review ?? [];
   const size = raw.size ?? 0;
   const low = raw.sizeLow ?? size;
   const high = raw.sizeHigh ?? size;
@@ -112,6 +114,34 @@ export default async function VocabResultPage() {
           })}
         </CardContent>
       </Card>
+
+      {review.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">逐词回顾 · {review.length} 词</CardTitle>
+            <CardDescription>每个词的正确释义都在这，答错的先记下来</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {review.map((r, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-3 border-b pb-2 text-sm last:border-b-0"
+              >
+                {r.ok ? (
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                ) : (
+                  <X className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                )}
+                <div className="flex flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <span className="font-medium">{r.word}</span>
+                  <span className="text-xs text-muted-foreground">Lv {r.level}</span>
+                  <span className="w-full text-muted-foreground">{r.meaning}</span>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

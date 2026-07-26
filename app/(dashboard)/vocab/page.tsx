@@ -2,11 +2,13 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { generateDailyQueue } from "@/lib/srs/queue";
+import { DEFAULT_DAILY_NEW, DEFAULT_DAILY_REVIEW } from "@/lib/vocab/config";
+import { DailyGoals } from "@/components/vocab/daily-goals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
-import { ArrowRight, BookMarked, Flame, TrendingUp, Languages, Layers, Tag } from "lucide-react";
+import { ArrowRight, BookMarked, Flame, TrendingUp, Languages, Layers, Tag, PenLine } from "lucide-react";
 
 const SOURCE_LABELS: Record<string, string> = {
   ielts: "雅思", toefl: "托福", gre: "GRE", cet4: "四级", cet6: "六级",
@@ -23,8 +25,12 @@ export default async function VocabPage() {
   const user = await requireUser();
   if (!user) return null;
 
+  const profile = await prisma.profile.findUnique({ where: { userId: user.id } });
+  const dailyNew = profile?.dailyNewWords ?? DEFAULT_DAILY_NEW;
+  const dailyReview = profile?.dailyReviewWords ?? DEFAULT_DAILY_REVIEW;
+
   const [queue, totalLearned, byLevel, recent] = await Promise.all([
-    generateDailyQueue(user.id, { newLimit: 20, reviewLimit: 100 }),
+    generateDailyQueue(user.id, { newLimit: dailyNew, reviewLimit: dailyReview }),
     prisma.vocabProgress.count({ where: { userId: user.id } }),
     prisma.$queryRawUnsafe<{ level: number; c: bigint }[]>(
       `SELECT w.level, COUNT(*) as c FROM VocabProgress vp
@@ -41,7 +47,7 @@ export default async function VocabPage() {
   ]);
 
   const totalToStudy = queue.dueList.length + queue.newList.length;
-  const dailyGoal = 20;
+  const dailyGoal = Math.max(1, dailyNew);
   const donePct = Math.min(100, Math.round(((dailyGoal - queue.newList.length) / dailyGoal) * 100));
 
   // 分类计数：按来源(裸 token)与话题(t: 前缀)统计词库覆盖，供分类学习入口
@@ -77,12 +83,20 @@ export default async function VocabPage() {
               </div>
             </div>
             {totalToStudy > 0 ? (
-              <Button asChild size="lg" className="bg-white text-primary hover:bg-white/90">
-                <Link href="/vocab/study">
-                  开始学习
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
+              <div className="flex flex-col gap-2">
+                <Button asChild size="lg" className="bg-white text-primary hover:bg-white/90">
+                  <Link href="/vocab/study">
+                    翻卡学习
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="outline" className="border-white/50 bg-transparent text-white hover:bg-white/10">
+                  <Link href="/vocab/study?mode=spell">
+                    <PenLine className="h-4 w-4" />
+                    拼写模式
+                  </Link>
+                </Button>
+              </div>
             ) : (
               <div className="rounded-lg bg-white/10 px-4 py-2 text-sm backdrop-blur">今日已清空 🎉</div>
             )}
@@ -145,6 +159,8 @@ export default async function VocabPage() {
           </CardContent>
         </Card>
       </div>
+
+      <DailyGoals newWords={dailyNew} reviewWords={dailyReview} />
 
       {(sources.length > 0 || topics.length > 0) && (
         <Card>

@@ -104,6 +104,7 @@ export function generateVocabQuestions(): GenVocabQ[] {
         ipa: target.ipa,
         pos: target.pos ?? null,
         cefr: target.cefr ?? null,
+        meaning: target.meaning,
         options,
         answer,
       });

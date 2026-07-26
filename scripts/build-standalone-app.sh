@@ -165,6 +165,59 @@ if [ ! -f "$DATA_DIR/data.db" ]; then
   osascript -e 'display notification "首次启动，初始化中..." with title "雅思学习助手"' 2>/dev/null
   cp "$DIR/template.db" "$DATA_DIR/data.db"
   echo "[$(date)] 数据库从模板初始化"
+else
+  # 内容同步：template 的题库/词库有更新时，刷新内容表，保留账号/评估/计划。
+  # 用"内容指纹"（各内容表行数）判断是否需要同步；相同则跳过。
+  # 注意：内容表主键是 cuid，重灌后 id 会变，故一并清理强依赖内容 id 的进度记录
+  #       (VocabProgress/Attempt/WritingSubmission/SpeakingSession)，避免悬空引用。
+  #       账号(User/Profile)、评估(Assessment)、计划(Plan/WeekPlan/DailyTask) 保留。
+  SQLITE=/usr/bin/sqlite3
+  FP_SQL="SELECT (SELECT count(*) FROM Word)||'_'||(SELECT count(*) FROM Passage)||'_'||(SELECT count(*) FROM Question)||'_'||(SELECT count(*) FROM WritingPrompt)||'_'||(SELECT count(*) FROM SpeakingPrompt);"
+  TPL_FP=$("$SQLITE" "$DIR/template.db" "$FP_SQL" 2>/dev/null)
+  DATA_FP=$("$SQLITE" "$DATA_DIR/data.db" "$FP_SQL" 2>/dev/null)
+  if [ -n "$TPL_FP" ] && [ "$TPL_FP" != "$DATA_FP" ]; then
+    echo "[$(date)] 内容有更新（$DATA_FP → $TPL_FP），同步题库/词库..."
+    cp "$DATA_DIR/data.db" "$DATA_DIR/data.db.bak"
+    "$SQLITE" "$DATA_DIR/data.db" <<SYNC
+PRAGMA foreign_keys=OFF;
+ATTACH '$DIR/template.db' AS tpl;
+BEGIN;
+DELETE FROM VocabProgress;
+DELETE FROM Attempt;
+DELETE FROM WritingSubmission;
+DELETE FROM SpeakingSession;
+DELETE FROM Question;
+DELETE FROM Passage;
+DELETE FROM Word;
+DELETE FROM WritingPrompt;
+DELETE FROM SpeakingPrompt;
+INSERT INTO Word SELECT * FROM tpl.Word;
+INSERT INTO Passage SELECT * FROM tpl.Passage;
+INSERT INTO Question SELECT * FROM tpl.Question;
+INSERT INTO WritingPrompt SELECT * FROM tpl.WritingPrompt;
+INSERT INTO SpeakingPrompt SELECT * FROM tpl.SpeakingPrompt;
+COMMIT;
+DETACH tpl;
+SYNC
+    if [ $? -eq 0 ]; then
+      echo "[$(date)] 内容同步完成（备份 data.db.bak）"
+    else
+      echo "[$(date)] 内容同步失败，回滚"
+      cp "$DATA_DIR/data.db.bak" "$DATA_DIR/data.db"
+    fi
+  fi
+
+  # schema 升级：补齐用户表新增的可空列（ADD COLUMN 安全幂等）。
+  # 内容同步只重灌内容表，不改用户表结构；新版加的列要在这里补，否则老 data.db 缺列会崩。
+  # 加列方式：SELECT 探测列是否存在，不存在才 ALTER。以后 schema 加列就在此加一行。
+  add_col() { # $1=表 $2=列 $3=列定义
+    "$SQLITE" "$DATA_DIR/data.db" "SELECT $2 FROM $1 LIMIT 1;" >/dev/null 2>&1 || {
+      "$SQLITE" "$DATA_DIR/data.db" "ALTER TABLE $1 ADD COLUMN $3;" 2>/dev/null \
+        && echo "[$(date)] schema 补列 $1.$2"
+    }
+  }
+  add_col Profile dailyNewWords "dailyNewWords INTEGER"
+  add_col Profile dailyReviewWords "dailyReviewWords INTEGER"
 fi
 
 # 找空闲端口

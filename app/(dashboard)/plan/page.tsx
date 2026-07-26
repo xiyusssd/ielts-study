@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { WeekTasks } from "@/components/planner/week-tasks";
+import { DailyGoals } from "@/components/vocab/daily-goals";
+import { DEFAULT_DAILY_NEW, DEFAULT_DAILY_REVIEW } from "@/lib/vocab/config";
 import { Target, Calendar, Clock, Pencil } from "lucide-react";
 
 const MODULE_LABEL: Record<string, string> = {
@@ -100,6 +102,11 @@ export default async function PlanPage() {
           </CardContent>
         </Card>
       </div>
+
+      <DailyGoals
+        newWords={profile?.dailyNewWords ?? DEFAULT_DAILY_NEW}
+        reviewWords={profile?.dailyReviewWords ?? DEFAULT_DAILY_REVIEW}
+      />
 
       <Card>
         <CardHeader>

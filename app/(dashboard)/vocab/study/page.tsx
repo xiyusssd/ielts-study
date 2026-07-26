@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
 import { generateDailyQueue } from "@/lib/srs/queue";
+import { DEFAULT_DAILY_NEW, DEFAULT_DAILY_REVIEW } from "@/lib/vocab/config";
 import { StudyCard } from "@/components/vocab/study-card";
+import { SpellCard } from "@/components/vocab/spell-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,22 +22,27 @@ const TOPIC_LABELS: Record<string, string> = {
 export default async function VocabStudyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ source?: string; topic?: string }>;
+  searchParams: Promise<{ source?: string; topic?: string; mode?: string }>;
 }) {
   const user = await requireUser();
   if (!user) return null;
 
-  const { source, topic } = await searchParams;
+  const { source, topic, mode } = await searchParams;
   const filterLabel = source
     ? SOURCE_LABELS[source] ?? source
     : topic
       ? TOPIC_LABELS[topic] ?? topic
       : null;
+  const spellMode = mode === "spell";
+
+  const profile = await prisma.profile.findUnique({ where: { userId: user.id } });
+  const newLimit = profile?.dailyNewWords ?? DEFAULT_DAILY_NEW;
+  const reviewLimit = profile?.dailyReviewWords ?? DEFAULT_DAILY_REVIEW;
 
   const { dueList, newList } = await generateDailyQueue(user.id, {
     // 分类学习时只出新词（按来源/话题），不掺入无关到期词
-    newLimit: filterLabel ? 20 : 20,
-    reviewLimit: filterLabel ? 0 : 100,
+    newLimit,
+    reviewLimit: filterLabel ? 0 : reviewLimit,
     source,
     topic,
   });
@@ -43,6 +51,15 @@ export default async function VocabStudyPage({
     ...dueList.map((d) => ({ word: d.word, isNew: false })),
     ...newList.map((n) => ({ word: n.word, isNew: true })),
   ];
+  const otherMode = spellMode ? "翻卡模式" : "拼写模式";
+  const otherModeHref = (() => {
+    const p = new URLSearchParams();
+    if (source) p.set("source", source);
+    if (topic) p.set("topic", topic);
+    if (!spellMode) p.set("mode", "spell");
+    const qs = p.toString();
+    return `/vocab/study${qs ? `?${qs}` : ""}`;
+  })();
 
   if (items.length === 0) {
     return (
@@ -66,16 +83,25 @@ export default async function VocabStudyPage({
 
   return (
     <div>
-      <div className="mb-4 flex items-center gap-2">
-        <div>
-          <h1 className="text-2xl font-bold">今日学习</h1>
-          <p className="text-sm text-muted-foreground">
-            {dueList.length} 复习 · {newList.length} 新词
-          </p>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div>
+            <h1 className="text-2xl font-bold">今日学习</h1>
+            <p className="text-sm text-muted-foreground">
+              {dueList.length} 复习 · {newList.length} 新词 · {spellMode ? "拼写模式" : "翻卡模式"}
+            </p>
+          </div>
+          {filterLabel && <Badge variant="default">{filterLabel}</Badge>}
         </div>
-        {filterLabel && <Badge variant="default">{filterLabel}</Badge>}
+        <Button asChild variant="outline" size="sm">
+          <Link href={otherModeHref}>切换到{otherMode}</Link>
+        </Button>
       </div>
-      <StudyCard items={items} remaining={items.length} />
+      {spellMode ? (
+        <SpellCard items={items} />
+      ) : (
+        <StudyCard items={items} remaining={items.length} />
+      )}
     </div>
   );
 }
