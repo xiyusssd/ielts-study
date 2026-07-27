@@ -1,12 +1,14 @@
-# ⭐⭐ 最新状态(2026-07-27) · 剑11 阅读 12 篇全部完成
+# ⭐⭐⭐ 最新状态(2026-07-27) · 剑11+剑12 阅读 24 篇全部完成
 
 **本轮完成(内容在本地 skip-worktree,未提交/未 push)**:
-- 修复 OCR 双栏交错根因:新脚本 `scripts/ocr-cols.sh` 按左右栏裁剪分别 OCR(左 0..W/2+8,右 W/2+13..W;tesseract 走 stdin 管道)。清理脚本 `scripts/clean-col-ocr.py`。合并脚本 `scripts/merge-c1112-reading.mjs`。
-- **剑11 阅读 12 篇全部落地**(t1-t4 × p1-p3),合并进 `lib/assessment/data/cambridge-reading.json`(48→**60 篇**)。正文用按栏 OCR,题目用整页 OCR,答案对 HANDOFF 全表**逐题核验**(修正表中 2 处错误:t3-p1 漏 Q7=wool、t3-p2 Q20 应为 C)。
-- 同步:`prisma/dev.db` 已重 seed(reading 68 篇);`next build` 通过(standalone 内嵌 60 篇);tsc 0 错误。
-- 验证:smoke-detail(c11 阅读详情 200)+ smoke-assessment(全流程 0 错误)通过。
-- ⏳ **App .app/.dmg 未重打包**(dist/ 已 gitignore,不影响提交);⏳ **剑12 阅读 12 篇未做**(源:剑12 Test5-8→t1-4,页范围见下表)。
-- ⚠️ 提交只含 3 个工具脚本(无版权正文);cambridge-reading.json 靠 skip-worktree 不会被提交,真实内容仅本地。
+- 修复 OCR 双栏交错根因:`scripts/ocr-cols.sh` 按左右栏裁剪分别 OCR(左 0..W/2+8,右 W/2+13..W;tesseract 走 stdin 管道)。清理 `scripts/clean-col-ocr.py`;合并 `scripts/merge-c1112-reading.mjs`。
+- **剑11+剑12 阅读全 24 篇落地**,合并进 `lib/assessment/data/cambridge-reading.json`(48→**72 篇**,c11×12 + c12×12,c12 源=剑12 Test5-8→t1-4)。
+- 正文用按栏 OCR(问题页/全宽段落匹配页用整页 OCR),答案**逐题对真实题目页核验**,修正 HANDOFF 答案表 4+ 处错误(t3-p1 漏 wool、t3-p2 Q20=C、c12-t2-p2 Para C=viii、c12-t3-p2 Q14-19 多插 C 等)。
+- ⚠️ **关键教训**:c12-t3-p1 曾因页码错位凭记忆臆造整篇(题型全错),读到真实 p59-62 后完全重写。**务必先读真实题目页再落地,不可照抄答案表或凭记忆**。
+- 同步网页:`prisma/dev.db` 重 seed(reading 80 篇);`next build` 通过(standalone 内嵌 72 篇);tsc 0 错误;smoke-detail + smoke-assessment 全绿。
+- 同步 App:`.app`(72篇)+ `.dmg`(235M,18:12)已重打包,template.db 80 篇。
+- 24 篇 JSON 备份在 `content/parsed/c1112-reading/`(gitignore,防 /tmp 清空)。
+- ⚠️ 未 push:仓库 PUBLIC,cambridge-reading.json 靠 skip-worktree 不会被提交;要 push 须走版权 stub 流程(见下"版权安全")。已提交项仅工具脚本+HANDOFF(无版权正文)。
 
 ---
 
