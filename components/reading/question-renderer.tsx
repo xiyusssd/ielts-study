@@ -20,6 +20,7 @@ export function QuestionRenderer({
   reviewMode,
   correctAnswer,
   explanation,
+  ok,
 }: {
   q: RenderedQ;
   value: string;
@@ -27,8 +28,14 @@ export function QuestionRenderer({
   reviewMode?: boolean;
   correctAnswer?: string;
   explanation?: string;
+  ok?: boolean;
 }) {
-  const isCorrect = reviewMode && value && correctAnswer && normalizeAnswer(value) === normalizeAnswer(correctAnswer);
+  // review 模式优先用服务端判分结果(含 accept 变体/标点归一),
+  // 仅在未提供时退回本地归一比较,避免与顶部统计自相矛盾。
+  const isCorrect =
+    reviewMode && value
+      ? ok ?? (!!correctAnswer && normalizeAnswer(value) === normalizeAnswer(correctAnswer))
+      : false;
   const isWrong = reviewMode && value && !isCorrect;
 
   return (
@@ -157,11 +164,17 @@ function ChoiceLetters({
   disabled?: boolean;
 }) {
   if (!options) return null;
+  // 部分剑桥题(人名/段落配对)选项文本已内嵌字母,如 "A (Roger Angel)"。
+  // 整组都内嵌时剥离,避免与位置字母重复显示成 "A. A (Roger Angel)"。
+  const allPrefixed = options.every((o, i) =>
+    new RegExp(`^${String.fromCharCode(65 + i)}[\\s.)]`).test(o),
+  );
   return (
     <div className="space-y-1">
       {options.map((opt, i) => {
         const letter = String.fromCharCode(65 + i);
         const picked = value === letter;
+        const text = allPrefixed ? opt.replace(/^[A-H][\s.)]\s*/, "") : opt;
         return (
           <button
             key={i}
@@ -174,7 +187,7 @@ function ChoiceLetters({
             )}
           >
             <span className="mr-2 font-mono text-muted-foreground">{letter}.</span>
-            {opt}
+            {text}
           </button>
         );
       })}

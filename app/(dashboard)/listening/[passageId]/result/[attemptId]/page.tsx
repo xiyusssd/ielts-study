@@ -103,9 +103,9 @@ export default async function ListeningResultPage({
                   options: q.options ? JSON.parse(q.options) : null,
                 }}
                 value={g?.user ?? ""}
-                onChange={() => {}}
                 reviewMode
                 correctAnswer={stdStr}
+                ok={g?.ok}
                 explanation={q.explanation ?? undefined}
               />
             );

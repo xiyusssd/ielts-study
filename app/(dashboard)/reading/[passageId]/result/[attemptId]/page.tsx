@@ -106,6 +106,7 @@ export default async function ReadingResultPage({
                 value={g?.user ?? ""}
                 reviewMode
                 correctAnswer={stdStr}
+                ok={g?.ok}
                 explanation={q.explanation ?? undefined}
               />
             );

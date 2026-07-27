@@ -40,9 +40,14 @@ function toQuestionRows(questions: PoolQ[]) {
     let answer: string;
     if (q.type === "mcq" && q.options) {
       // study 模块 mcq 按字母判分：答案 = 正确选项的字母
-      const pos = q.options.indexOf(q.answer);
+      // IN EITHER ORDER 题(accept 列了兄弟选项)转成字母数组,任一字母都算对
+      const toLetter = (v: string) => {
+        const pos = q.options!.indexOf(v);
+        return pos >= 0 ? LETTERS[pos] : v;
+      };
+      const letters = [q.answer, ...(q.accept ?? [])].map(toLetter);
       options = JSON.stringify(q.options);
-      answer = JSON.stringify(pos >= 0 ? LETTERS[pos] : q.answer);
+      answer = JSON.stringify(letters.length > 1 ? letters : letters[0]);
     } else if (q.type === "gapfill") {
       const all = [q.answer, ...(q.accept ?? [])];
       answer = JSON.stringify(all.length > 1 ? all : q.answer);
