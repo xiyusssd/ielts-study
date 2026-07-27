@@ -1,4 +1,16 @@
-# ⭐ 最新状态(2026-07-26 晚) · 明天从这里看起
+# ⭐⭐ 最新状态(2026-07-27) · 剑11 阅读 12 篇全部完成
+
+**本轮完成(内容在本地 skip-worktree,未提交/未 push)**:
+- 修复 OCR 双栏交错根因:新脚本 `scripts/ocr-cols.sh` 按左右栏裁剪分别 OCR(左 0..W/2+8,右 W/2+13..W;tesseract 走 stdin 管道)。清理脚本 `scripts/clean-col-ocr.py`。合并脚本 `scripts/merge-c1112-reading.mjs`。
+- **剑11 阅读 12 篇全部落地**(t1-t4 × p1-p3),合并进 `lib/assessment/data/cambridge-reading.json`(48→**60 篇**)。正文用按栏 OCR,题目用整页 OCR,答案对 HANDOFF 全表**逐题核验**(修正表中 2 处错误:t3-p1 漏 Q7=wool、t3-p2 Q20 应为 C)。
+- 同步:`prisma/dev.db` 已重 seed(reading 68 篇);`next build` 通过(standalone 内嵌 60 篇);tsc 0 错误。
+- 验证:smoke-detail(c11 阅读详情 200)+ smoke-assessment(全流程 0 错误)通过。
+- ⏳ **App .app/.dmg 未重打包**(dist/ 已 gitignore,不影响提交);⏳ **剑12 阅读 12 篇未做**(源:剑12 Test5-8→t1-4,页范围见下表)。
+- ⚠️ 提交只含 3 个工具脚本(无版权正文);cambridge-reading.json 靠 skip-worktree 不会被提交,真实内容仅本地。
+
+---
+
+# 最新状态(2026-07-26 晚)
 
 **本轮全部完成并已提交(commit 4615ac7,未 push)**:
 1. 评估:修复重测清零 bug + 每模块可重测 + 手动填分跳过测试(/assessment/manual)
