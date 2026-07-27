@@ -42,7 +42,7 @@
    - build-standalone-app.sh: 健全性检查用 require.resolve 动态定位 @prisma/client(移除硬编码 pnpm 版本路径)
    - ⚠️ **commit 6f2653e 还没 push**(GitHub 443 超时)。前两个 commit ff15bd7/464f798 已 push。
 2. **听力扩充完成**:cambridge-listening.json 16→**24 套**(剑11-16 全覆盖)。
-   - 脚本 `scripts/add-c1112-listening.py`(题干+答案内联,可重跑,幂等)
+   - 脚本 `add-c1112-listening.py`(题干+答案内联,可重跑,幂等)⚠️ **已移出版本控制**,副本在 `content/parsed/copyright-scripts/`(gitignore)。绝不入库(见文末版权安全)。
    - 8 套 Section4 音频已转码:`public/audio/listening/c1[12]-t[1-4]-s4.m4a`
      ⚠️ 剑11/12 是**真 MP3**(不是误标m4a!),已 afconvert -f m4af -d aac 转 AAC-LC(同剑16)
    - 剑12 用 Test5-8 编号 → 映射 c12-t1..t4
@@ -83,11 +83,14 @@
 1. 合并:写脚本把 /tmp/c1112-reading/*.json append 进 cambridge-reading.json(注意该文件 skip-worktree,直接改磁盘即可,48→72篇)
 2. 验证:`~/.local/node22/bin/tsc --noEmit`(0错误) + `node_modules/.bin/next build`
 3. **push 待发**:`git push origin main`(把 6f2653e 推上去;网络恢复后)
-4. 音频+脚本提交:git add public/audio/listening/c1[12]-*.m4a scripts/add-c1112-listening.py scripts/ocr-book.sh → commit
-   ⚠️ **版权安全**:c1[3-6]-*.m4a 已 gitignore,但 **c11/c12 音频规则要确认**!检查 .gitignore 是否覆盖 c1[12]-*.m4a,不覆盖则加规则,**绝不提交剑桥音频**。
+4. 脚本提交:只提交 `scripts/ocr-book.sh` 等**通用工具**(无内联版权)。
+   ⚠️ **剑桥内容脚本(build-cambridge-reading*/add-c1[124]*-listening)绝不入库** —— 它们内联了剑桥题干+答案,等同版权正文。副本留 `content/parsed/copyright-scripts/`(gitignore)。
+   ⚠️ 音频:c1[1-6]-*.m4a 已 gitignore(第62行),**绝不提交剑桥音频**。
 5. 发布流程走版权替换(见下),重打包 .app/.dmg
 
 ## ⚠️ 版权安全(仓库PUBLIC,照旧)
+- **2026-07-27 历史清理**:发现 build-cambridge-reading*/add-c1[124]*-listening 六脚本把剑桥题干+答案内联入库(剑13-16阅读+剑14听力已 push,剑11/12听力待 push)。已用 `git filter-repo --invert-paths` 从**全历史**移除并 force-push 覆盖 public 远程(464f798→a710278),clone 净检无泄漏。副本留 `content/parsed/copyright-scripts/`(gitignore)。备份:`/tmp/ielts-full-*.bundle` + `/tmp/ielts-git-backup-*`。
+- **红线扩展**:不止"正文全文",**题干+答案也算版权**,任何载体(json/py/mjs)都不得入库。
 - 提交前:三个 skip-worktree JSON 临时 --no-skip-worktree → cambridge-*写空stub[]、vocab-bank跑 build-vocab-bank.py(ECDICT-only,CSV在/tmp/ecdict/ecdict.csv 77万行) → commit → 恢复真实内容(md5校验) → 重新skip-worktree → clone远程验无泄漏
 - 真实内容 md5:reading=16d496cf177af96dc42500f04fa1d0af listening(旧,已变) vocab=3300bffa91f2c8a7b9286a4472d44879
 - `资料/` `*.mdx` `*.mdd` `dist/` `public/audio/listening/c1[3-6]-*.m4a` 已 gitignore
