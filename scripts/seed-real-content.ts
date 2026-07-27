@@ -24,8 +24,16 @@ type PoolQ = {
 
 const LETTERS = "ABCDEFGHIJ";
 
+const TFNG_OPTIONS = ["TRUE", "FALSE", "NOT GIVEN"];
+const YNG_OPTIONS = ["YES", "NO", "NOT GIVEN"];
+
 /** 转成 study 模块 Question 行 */
 function toQuestionRows(questions: PoolQ[]) {
+  // 雅思 tfng 有两套按钮：信息类 TRUE/FALSE/NOT GIVEN vs 观点类 YES/NO/NOT GIVEN。
+  // 单篇内不混用（已核验），故按整篇判定：出现 YES/NO 即整篇用 YNG。
+  const tfngIsYNG = questions.some(
+    (q) => q.type === "tfng" && (q.answer === "YES" || q.answer === "NO"),
+  );
   return questions.map((q, idx) => {
     let type = q.type as string;
     let options: string | null = null;
@@ -39,7 +47,8 @@ function toQuestionRows(questions: PoolQ[]) {
       const all = [q.answer, ...(q.accept ?? [])];
       answer = JSON.stringify(all.length > 1 ? all : q.answer);
     } else {
-      // tfng
+      // tfng：把正确按钮集存进 options，答题页据此渲染（不泄漏答案）
+      options = JSON.stringify(tfngIsYNG ? YNG_OPTIONS : TFNG_OPTIONS);
       answer = JSON.stringify(q.answer);
     }
     return {

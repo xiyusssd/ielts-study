@@ -16,14 +16,14 @@ const TFNG_OPTIONS = ["TRUE", "FALSE", "NOT GIVEN"];
 export function QuestionRenderer({
   q,
   value,
-  onChange,
+  onChange = () => {},
   reviewMode,
   correctAnswer,
   explanation,
 }: {
   q: RenderedQ;
   value: string;
-  onChange: (v: string) => void;
+  onChange?: (v: string) => void;
   reviewMode?: boolean;
   correctAnswer?: string;
   explanation?: string;
@@ -45,7 +45,13 @@ export function QuestionRenderer({
       </div>
 
       {q.type === "tfng" && (
-        <ChoiceButtons options={TFNG_OPTIONS} value={value} onChange={onChange} disabled={reviewMode} compact />
+        <ChoiceButtons
+          options={Array.isArray(q.options) && q.options.length ? (q.options as string[]) : TFNG_OPTIONS}
+          value={value}
+          onChange={onChange}
+          disabled={reviewMode}
+          compact
+        />
       )}
 
       {q.type === "mcq" && (

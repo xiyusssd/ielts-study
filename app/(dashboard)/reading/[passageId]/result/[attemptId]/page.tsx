@@ -104,7 +104,6 @@ export default async function ReadingResultPage({
                   options: q.options ? JSON.parse(q.options) : null,
                 }}
                 value={g?.user ?? ""}
-                onChange={() => {}}
                 reviewMode
                 correctAnswer={stdStr}
                 explanation={q.explanation ?? undefined}
