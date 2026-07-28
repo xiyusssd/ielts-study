@@ -10,6 +10,9 @@
   - 产物:`dist-electron/雅思学习助手-0.1.0-arm64.dmg`(**456M**,gitignore)。未签名/未公证(本地自用,右键打开)。
   - **⚠️ 待优化**:app.asar 含 ~303M 冗余 node_modules(electron-builder 按 package.json dependencies 自动收集,主进程其实用不到),让 dmg 偏大。后续可通过 files/dependencies 调整瘦身(不影响功能)。
   - 打包命令:`pnpm electron:build`(或 `./scripts/build-electron-app.sh`);dev 自测 `pnpm electron:dev`。
+  - **asar 瘦身**(commit `cf000b5`):electron-builder 默认按 package.json dependencies 把 ~289M 生产依赖打进 app.asar(主进程用不到,server 用的已由 afterPack 单独放 Resources/app/node_modules)。electron-builder.yml 的 `files` 加 `!node_modules/**/*` 排除 → app.asar 289M→14K,**dmg 456M→339M**。
+  - **⚠️⚠️ CSS 404 / UI 裸奔坑(务必牢记)**:打包出的 .app 若整体样式丢失,是因为 **dev server(dev.sh 的 next dev --turbopack)一直在跑,持续用 dev 产物污染 `.next`**;打包时 HTML 引用 dev 路径 `/_next/static/css/app/layout.css` 但磁盘是 production hash 文件 `xxx.css` → CSS 404。**打包前铁律:先 `pkill next dev` 杀净所有 next 进程 → `rm -rf .next` → 干净 `next build` → 再打包**。验证:curl `/login` 的 CSS 引用应是 hash 文件名且状态 200(非 `app/layout.css`)。
+  - ⚠️ **pkill 教训**:`pkill -f "next dev"` 模式过宽会误杀其他项目的 dev server(本次误杀了「网页版生图」项目的两个)。杀进程用更精确的路径匹配。
 
 **本地所有 commit(未 push)**:`1ab584a` 写作扩充+句子拼写四项 → `c0f9d33` HANDOFF → `c1ffc70` 句子完成页 bug → `8e533b5` Electron → `2969066` afterPack 修复。push 须走版权 stub 流程。
 
