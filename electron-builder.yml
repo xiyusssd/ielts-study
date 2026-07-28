@@ -5,10 +5,13 @@ directories:
   buildResources: build
 asar: true
 afterPack: electron/after-pack.js
-# 进 asar 的只有主进程代码
+# 进 asar 的只有主进程代码。显式排除 node_modules：主进程只用 electron+node 内置模块，
+# server 用的依赖已由 afterPack 单独放进 Resources/app/node_modules。
+# electron-builder 默认会收集 production dependencies，故必须显式排除，否则 ~289M 冗余。
 files:
   - electron/**/*
   - package.json
+  - "!node_modules/**/*"
 # 复制到 Contents/Resources/（asar 外）—— 外部 node/standalone/原生引擎无法从 asar 内执行
 extraResources:
   - from: .next/standalone
