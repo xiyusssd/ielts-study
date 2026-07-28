@@ -116,6 +116,23 @@ export function SentenceCard({ items, aiEnabled = false }: { items: Item[]; aiEn
     setAiOverride({});
   }
 
+  // 初回から練習句なし(queue 空)：完走とは区別して空メッセージ
+  if (queue.length === 0) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <Card>
+          <CardContent className="space-y-4 p-8 text-center">
+            <h2 className="text-2xl font-bold">暂无可练句子</h2>
+            <p className="text-muted-foreground">当前队列里的词都没有例句，换翻卡或单词拼写试试。</p>
+            <Button asChild>
+              <Link href="/vocab">返回词汇首页</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (idx >= queue.length) {
     const total = queue.length;
     const rate = total > 0 ? Math.round((done / total) * 100) : 0;

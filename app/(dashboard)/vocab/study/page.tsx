@@ -83,18 +83,18 @@ export default async function VocabStudyPage({
 
   const modeLabel = sentenceMode ? "句子拼写" : spellMode ? "单词拼写" : "翻卡模式";
 
-  if (items.length === 0) {
+  // 句子模式不走服务端空状态早退：答完最后一句后 reviewWord 触发 RSC 刷新会把
+  // 队列清空，若在此 return 会卸载 SentenceCard、顶掉客户端完成页。空状态交给卡片内部处理。
+  if (items.length === 0 && !sentenceMode) {
     return (
       <div className="mx-auto max-w-2xl">
         <Card>
           <CardContent className="space-y-4 p-8 text-center">
             <h2 className="text-2xl font-bold">
-              {sentenceMode ? "暂无可练句子" : filterLabel ? `「${filterLabel}」暂无新词` : "今日已清空 🎉"}
+              {filterLabel ? `「${filterLabel}」暂无新词` : "今日已清空 🎉"}
             </h2>
             <p className="text-muted-foreground">
-              {sentenceMode
-                ? "当前队列里的词都没有例句，换翻卡或单词拼写试试。"
-                : filterLabel ? "该分类的词都已在学习队列中，换个分类试试。" : "没有待复习或新学的单词，来日方长。"}
+              {filterLabel ? "该分类的词都已在学习队列中，换个分类试试。" : "没有待复习或新学的单词，来日方长。"}
             </p>
             <Button asChild>
               <Link href="/vocab">返回词汇首页</Link>
