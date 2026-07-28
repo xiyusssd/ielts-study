@@ -1,3 +1,28 @@
+# ⭐⭐⭐ 最新状态(2026-07-28 续) · 写作扩充 + 句子拼写四项加强 · 已 commit 1ab584a(未 push)
+
+**本轮完成并已提交(commit `1ab584a`,23 文件 +639/-125,未 push)**:
+
+1. **写作范文/模板扩充**(`lib/writing/seed-templates.ts` + `writing/samples/page.tsx`):
+   - 模板库 8→**24 条**:补 T1 流程图引言/步骤段、地图变化段、饼图占比段、同期比较段;T2 利弊/问题解决/双问题三种引言、原因分析段、解决方案段、第二种结论;新增「高级衔接词替换表」+「低分词→高分词替换表」。category 沿用现有枚举自动归 tab。
+   - 范文库 3→**9 篇**:`SampleEssay` 加 `task` 字段;新增 T2 利弊/问题解决/双问题(band 7/8/7)+ T1 柱状(b7)/折线(b8)/流程图(b7),每篇原创正文+分段点评。范文页改**按 Task 1/Task 2 分组**,组内按 band 排序。
+   - ⚠️ 全原创,题目用通用改写题,**不触版权**,可正常入库。
+2. **句子拼写四项加强**(`components/vocab/sentence-card.tsx` + `lib/ai/content-gen.ts` + `api/vocab/gen-sentence/route.ts`):
+   - **修逐词判分错位**(真实缺陷):`wordDiff` 从按索引对齐改为 **LCS 最长公共子序列对齐**,漏词/多词只标真正错的词,不再连锁满屏红。已独立跑用例验证。
+   - **提示台阶**:「提示下一词」逐个揭示 +「看首字母」骨架(`c__`);用过提示的答对降级为 FSRS grade 1、不计连击。
+   - **错题重练+统计**:完成页显示 答对率/最高连击/答错数;「只练错题」按钮用错题重开一轮;顶栏连击≥2 实时显示火苗。
+   - **AI 例句可降难度**:`generateExampleSentence` 加 `easy`(5-10 词 A2-B1 口语)/`standard`(雅思 6-7) 档,接口透传,组件顶栏可切「简单/标准」。
+3. **修过时冒烟断言**:`smoke-vocab-modes` 找旧文案「拼写模式」→改为「单词拼写」(模式早已重命名,非功能回归)。
+
+**验证**:tsc 0 错误;**9/9 冒烟全绿**(routes/vocab/vocab-modes/vocab-review/detail/assessment/audio/manual/reassess)。dev(3000) 健康;app(3001) 未起(本轮只做网页端)。
+
+**待续**(优先级从高到低):
+- [ ] **句子拼写浏览器实测**:上面四项交互(提示揭示/错题重练/难度切换/连击/换AI句)代码+类型全通,但真实点击效果需登录后进 `/vocab/study?mode=sentence` 试(测试账号 test@example.com/test1234 有 2 个带例句到期词)。
+- [ ] **Electron 独立窗口**(用户已选 Electron,tasks 未动):主进程 spawn 打包内 node22 跑 server.js→等 health→BrowserWindow 加载 localhost;electron-builder 打包,体积 +~150MB。关键坑:Prisma 原生引擎用 spawn 子进程跑(别在 Electron 主进程 require)。
+- [ ] **重打包 .app** 同步本轮写作+句子拼写改动(+ Electron)。
+- [ ] push:仓库 public,须走版权 stub 流程(三个 skip-worktree JSON 置空→commit→恢复→clone 验证)。本次仅 commit 未 push。
+
+---
+
 # ⭐⭐⭐ 最新状态(2026-07-28) · UI升级 + 听力重构 + airouter文本 + 词书锁定 + 句子拼写 + 换AI句
 
 **本轮完成(全部本地,未提交)**:
