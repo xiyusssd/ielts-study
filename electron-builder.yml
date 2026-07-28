@@ -4,6 +4,7 @@ directories:
   output: dist-electron
   buildResources: build
 asar: true
+afterPack: electron/after-pack.js
 # 进 asar 的只有主进程代码
 files:
   - electron/**/*
