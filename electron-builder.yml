@@ -1,0 +1,40 @@
+appId: app.ielts.study
+productName: 雅思学习助手
+directories:
+  output: dist-electron
+  buildResources: build
+asar: true
+# 进 asar 的只有主进程代码
+files:
+  - electron/**/*
+  - package.json
+# 复制到 Contents/Resources/（asar 外）—— 外部 node/standalone/原生引擎无法从 asar 内执行
+extraResources:
+  - from: .next/standalone
+    to: app
+  - from: .next/static
+    to: app/.next/static
+  - from: public
+    to: app/public
+  - from: prisma
+    to: app/prisma
+  - from: build/template.db
+    to: template.db
+  - from: /Users/xiyu/.local/node22/bin/node
+    to: node
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  category: public.app-category.education
+  icon: build/icon.icns
+  minimumSystemVersion: "12.0"
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  extendInfo:
+    NSMicrophoneUsageDescription: 口语练习需要访问麦克风进行录音评测
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+dmg:
+  title: 雅思学习助手

@@ -24,6 +24,11 @@ prisma/migrations/**/migration.sql.bak
 dist/
 *.dmg
 
+# Electron 打包产物 + 含版权内容的 template.db + 生成的图标
+dist-electron/
+build/template.db
+build/icon.icns
+
 # 备份
 backups/
 
