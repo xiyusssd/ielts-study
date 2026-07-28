@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { providerReady } from "@/lib/env";
 import { generateDailyQueue } from "@/lib/srs/queue";
 import { DEFAULT_DAILY_NEW, DEFAULT_DAILY_REVIEW } from "@/lib/vocab/config";
 import { StudyCard } from "@/components/vocab/study-card";
 import { SpellCard } from "@/components/vocab/spell-card";
+import { SentenceCard } from "@/components/vocab/sentence-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,39 +29,59 @@ export default async function VocabStudyPage({
   const user = await requireUser();
   if (!user) return null;
 
-  const { source, topic, mode } = await searchParams;
-  const filterLabel = source
-    ? SOURCE_LABELS[source] ?? source
-    : topic
-      ? TOPIC_LABELS[topic] ?? topic
-      : null;
+  const { source: urlSource, topic, mode } = await searchParams;
   const spellMode = mode === "spell";
+  const sentenceMode = mode === "sentence";
 
   const profile = await prisma.profile.findUnique({ where: { userId: user.id } });
   const newLimit = profile?.dailyNewWords ?? DEFAULT_DAILY_NEW;
   const reviewLimit = profile?.dailyReviewWords ?? DEFAULT_DAILY_REVIEW;
 
+  // URL 显式 source/topic = 临时筛选(只出新词)；否则回落到锁定词书(正常日常队列)
+  const isExplicitFilter = !!urlSource || !!topic;
+  const source = urlSource ?? profile?.vocabBook ?? undefined;
+  const filterLabel = urlSource
+    ? SOURCE_LABELS[urlSource] ?? urlSource
+    : topic
+      ? TOPIC_LABELS[topic] ?? topic
+      : null;
+
   const { dueList, newList } = await generateDailyQueue(user.id, {
-    // 分类学习时只出新词（按来源/话题），不掺入无关到期词
+    // 显式分类学习时只出新词(不掺无关到期词)；日常队列含复习
     newLimit,
-    reviewLimit: filterLabel ? 0 : reviewLimit,
+    reviewLimit: isExplicitFilter ? 0 : reviewLimit,
     source,
     topic,
   });
 
-  const items = [
+  let items = [
     ...dueList.map((d) => ({ word: d.word, isNew: false })),
     ...newList.map((n) => ({ word: n.word, isNew: true })),
   ];
-  const otherMode = spellMode ? "翻卡模式" : "拼写模式";
+  // 句子拼写只能用有例句的词，过滤掉无例句的
+  if (sentenceMode) {
+    items = items.filter((it) => {
+      try {
+        const ex = JSON.parse(it.word.examples) as unknown[];
+        return Array.isArray(ex) && ex.length > 0;
+      } catch {
+        return false;
+      }
+    });
+  }
+  // 模式三态循环：翻卡 → 单词拼写 → 句子拼写 → 翻卡
+  const nextMode = sentenceMode ? "" : spellMode ? "sentence" : "spell";
+  const otherMode = sentenceMode ? "翻卡模式" : spellMode ? "句子拼写" : "单词拼写";
   const otherModeHref = (() => {
     const p = new URLSearchParams();
-    if (source) p.set("source", source);
+    if (urlSource) p.set("source", urlSource);
     if (topic) p.set("topic", topic);
-    if (!spellMode) p.set("mode", "spell");
+    if (nextMode) p.set("mode", nextMode);
     const qs = p.toString();
     return `/vocab/study${qs ? `?${qs}` : ""}`;
   })();
+
+  const modeLabel = sentenceMode ? "句子拼写" : spellMode ? "单词拼写" : "翻卡模式";
 
   if (items.length === 0) {
     return (
@@ -67,10 +89,12 @@ export default async function VocabStudyPage({
         <Card>
           <CardContent className="space-y-4 p-8 text-center">
             <h2 className="text-2xl font-bold">
-              {filterLabel ? `「${filterLabel}」暂无新词` : "今日已清空 🎉"}
+              {sentenceMode ? "暂无可练句子" : filterLabel ? `「${filterLabel}」暂无新词` : "今日已清空 🎉"}
             </h2>
             <p className="text-muted-foreground">
-              {filterLabel ? "该分类的词都已在学习队列中，换个分类试试。" : "没有待复习或新学的单词，来日方长。"}
+              {sentenceMode
+                ? "当前队列里的词都没有例句，换翻卡或单词拼写试试。"
+                : filterLabel ? "该分类的词都已在学习队列中，换个分类试试。" : "没有待复习或新学的单词，来日方长。"}
             </p>
             <Button asChild>
               <Link href="/vocab">返回词汇首页</Link>
@@ -88,7 +112,7 @@ export default async function VocabStudyPage({
           <div>
             <h1 className="text-2xl font-bold">今日学习</h1>
             <p className="text-sm text-muted-foreground">
-              {dueList.length} 复习 · {newList.length} 新词 · {spellMode ? "拼写模式" : "翻卡模式"}
+              {dueList.length} 复习 · {newList.length} 新词 · {modeLabel}
             </p>
           </div>
           {filterLabel && <Badge variant="default">{filterLabel}</Badge>}
@@ -97,7 +121,9 @@ export default async function VocabStudyPage({
           <Link href={otherModeHref}>切换到{otherMode}</Link>
         </Button>
       </div>
-      {spellMode ? (
+      {sentenceMode ? (
+        <SentenceCard items={items} aiEnabled={providerReady("text")} />
+      ) : spellMode ? (
         <SpellCard items={items} />
       ) : (
         <StudyCard items={items} remaining={items.length} />

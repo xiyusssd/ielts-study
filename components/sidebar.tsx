@@ -57,17 +57,17 @@ export function Sidebar({ email }: { email: string }) {
               key={item.href}
               href={item.href}
               className={cn(
-                "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all",
+                "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all",
                 active
-                  ? "bg-primary/10 text-primary shadow-soft"
+                  ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
+              {active && (
+                <span className="absolute inset-y-1.5 left-0 w-1 rounded-full bg-brand-gradient" />
+              )}
               <Icon className={cn("h-4 w-4 transition-transform", active && "text-primary", !active && "group-hover:scale-110")} />
               <span>{item.label}</span>
-              {active && (
-                <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
-              )}
             </Link>
           );
         })}

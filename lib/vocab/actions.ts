@@ -4,6 +4,23 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { schedule, type Grade } from "@/lib/srs/fsrs";
+import { VOCAB_BOOK_IDS } from "@/lib/vocab/config";
+
+/** 锁定/切换学习词书。book=null 表示学全部词库。 */
+export async function saveVocabBook(book: string | null) {
+  const user = await requireUser();
+  if (!user) return { ok: false as const, error: "未登录" };
+  // 只接受白名单里的词书 id，或 null
+  const value = book && VOCAB_BOOK_IDS.includes(book as (typeof VOCAB_BOOK_IDS)[number]) ? book : null;
+  await prisma.profile.update({
+    where: { userId: user.id },
+    data: { vocabBook: value },
+  });
+  revalidatePath("/vocab");
+  revalidatePath("/vocab/study");
+  revalidatePath("/");
+  return { ok: true as const };
+}
 
 /** 保存用户的每日词量偏好（新词 / 复习上限）*/
 export async function saveDailyGoals(input: { newWords: number; reviewWords: number }) {

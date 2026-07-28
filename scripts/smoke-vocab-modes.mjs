@@ -21,7 +21,7 @@ const run = async () => {
   // === 1. 每日词量设置 ===
   await page.goto(`${BASE}/vocab`, { waitUntil: 'networkidle' });
   checks.push(['词汇首页有「每日词量」', await page.getByText(/每日词量/).count() > 0]);
-  checks.push(['有「拼写模式」入口', await page.getByRole('link', { name: /拼写模式/ }).count() > 0]);
+  checks.push(['有「单词拼写」入口', await page.getByRole('link', { name: /单词拼写/ }).count() > 0]);
 
   // 点每日新词预设 10，保存
   const goalsCard = page.locator('div').filter({ hasText: /每日词量/ }).last();
@@ -42,7 +42,7 @@ const run = async () => {
     console.log('· 无可学单词，跳过拼写交互');
   } else {
     checks.push(['拼写模式显示输入框', await page.locator('input[placeholder*="拼出"]').count() > 0]);
-    checks.push(['拼写模式标注', await page.getByText(/拼写模式/).count() > 0]);
+    checks.push(['单词拼写标注', await page.getByText(/单词拼写/).count() > 0]);
     // 故意输错，检查反馈
     const input = page.locator('input[placeholder*="拼出"]');
     await input.fill('zzzznotaword');

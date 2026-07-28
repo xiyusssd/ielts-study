@@ -218,6 +218,7 @@ SYNC
   }
   add_col Profile dailyNewWords "dailyNewWords INTEGER"
   add_col Profile dailyReviewWords "dailyReviewWords INTEGER"
+  add_col Profile vocabBook "vocabBook TEXT"
 fi
 
 # 找空闲端口
@@ -244,7 +245,9 @@ export AI_VOICE_PROVIDER=openai
 export AI_STT_PROVIDER=openai
 export AI_REALTIME_PROVIDER=openai
 export OPENAI_BASE_URL="https://api.openai.com/v1"
-export OPENAI_TEXT_MODEL="gpt-4o"
+# 文本能力默认走 airouter(key 由用户 .env 提供，不写死进脚本)；语音仍走官方 OPENAI_*
+export OPENAI_TEXT_BASE_URL="https://airouter.linkof.link/v1"
+export OPENAI_TEXT_MODEL="gpt-5.6-sol"
 export OPENAI_TTS_MODEL="tts-1"
 export OPENAI_STT_MODEL="whisper-1"
 export OPENAI_REALTIME_MODEL="gpt-4o-realtime-preview"

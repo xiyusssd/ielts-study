@@ -14,6 +14,16 @@ const config: Config = {
       screens: { "2xl": "1400px" },
     },
     extend: {
+      fontFamily: {
+        display: [
+          "var(--font-display)",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "PingFang SC",
+          "Microsoft YaHei",
+          "sans-serif",
+        ],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -67,9 +77,9 @@ const config: Config = {
         "2xl": "calc(var(--radius) + 8px)",
       },
       boxShadow: {
-        soft: "0 1px 2px 0 rgb(0 0 0 / 0.03), 0 1px 6px -1px rgb(0 0 0 / 0.05)",
-        card: "0 2px 4px -1px rgb(0 0 0 / 0.04), 0 4px 12px -2px rgb(0 0 0 / 0.08)",
-        glow: "0 0 0 3px hsl(var(--primary) / 0.15), 0 8px 24px -6px hsl(var(--primary) / 0.25)",
+        soft: "0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.06)",
+        card: "0 1px 3px 0 rgb(16 24 40 / 0.04), 0 8px 20px -6px rgb(16 24 40 / 0.12), 0 2px 6px -2px rgb(16 24 40 / 0.06)",
+        glow: "0 0 0 3px hsl(var(--primary) / 0.12), 0 12px 32px -8px hsl(var(--primary) / 0.35)",
       },
       keyframes: {
         "accordion-down": {

@@ -46,14 +46,15 @@ export default async function DashboardHomePage() {
     <div className="space-y-8 animate-in-slide">
       {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl bg-brand-gradient p-6 text-white shadow-glow lg:p-8">
-        <div className="bg-grid pointer-events-none absolute inset-0 opacity-15" />
+        <div className="bg-grid pointer-events-none absolute inset-0 opacity-10" />
+        <div className="bg-hero-glow pointer-events-none absolute inset-0" />
         <div className="relative flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm text-white/80">
               <Sparkles className="h-4 w-4" />
               {greeting()}
             </div>
-            <h1 className="text-3xl font-bold lg:text-4xl">
+            <h1 className="font-display text-3xl font-bold lg:text-4xl">
               {user.email.split("@")[0]}
               {streak > 0 && (
                 <span className="ml-3 inline-flex items-center gap-1 rounded-full bg-white/15 px-3 py-1 text-base font-medium align-middle backdrop-blur">
@@ -74,7 +75,7 @@ export default async function DashboardHomePage() {
                 <Calendar className="h-3 w-3" />
                 距考试
               </div>
-              <div className="text-4xl font-bold">{daysToExam}</div>
+              <div className="font-display nums text-4xl font-bold">{daysToExam}</div>
               <div className="text-xs text-white/70">天</div>
             </div>
           )}
@@ -162,7 +163,7 @@ export default async function DashboardHomePage() {
                 />
                 <div className="mt-2 flex items-center justify-center gap-2 text-sm">
                   <span className="text-muted-foreground">Overall</span>
-                  <span className="text-2xl font-bold text-brand-gradient">{bands.overall || "—"}</span>
+                  <span className="font-display nums text-2xl font-bold text-brand-gradient">{bands.overall || "—"}</span>
                 </div>
               </CardContent>
             </Card>
@@ -183,11 +184,11 @@ export default async function DashboardHomePage() {
               <span className="text-xs text-muted-foreground">点击卡片进入</span>
             </div>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-              <ModuleCard label="词汇" href="/vocab" icon={Languages} value={vocab.total} sub={`${vocab.dueToday} 待复习`} module="vocab" />
-              <ModuleCard label="阅读" href="/reading" icon={BookOpen} value={reading.count} sub={reading.bestBand ? `Best ${reading.bestBand}` : "未尝试"} module="reading" />
-              <ModuleCard label="听力" href="/listening" icon={Headphones} value={listening.count} sub={listening.bestBand ? `Best ${listening.bestBand}` : "未尝试"} module="listening" />
-              <ModuleCard label="写作" href="/writing" icon={Pen} value={writing.count} sub={writing.avgOverall > 0 ? `均 ${writing.avgOverall.toFixed(1)}` : "未尝试"} module="writing" />
-              <ModuleCard label="口语" href="/speaking" icon={Mic} value={speaking.count} sub={speaking.avgOverall > 0 ? `均 ${speaking.avgOverall.toFixed(1)}` : "未尝试"} module="speaking" />
+              <ModuleCard index={0} label="词汇" href="/vocab" icon={Languages} value={vocab.total} sub={`${vocab.dueToday} 待复习`} module="vocab" />
+              <ModuleCard index={1} label="阅读" href="/reading" icon={BookOpen} value={reading.count} sub={reading.bestBand ? `Best ${reading.bestBand}` : "未尝试"} module="reading" />
+              <ModuleCard index={2} label="听力" href="/listening" icon={Headphones} value={listening.count} sub={listening.bestBand ? `Best ${listening.bestBand}` : "未尝试"} module="listening" />
+              <ModuleCard index={3} label="写作" href="/writing" icon={Pen} value={writing.count} sub={writing.avgOverall > 0 ? `均 ${writing.avgOverall.toFixed(1)}` : "未尝试"} module="writing" />
+              <ModuleCard index={4} label="口语" href="/speaking" icon={Mic} value={speaking.count} sub={speaking.avgOverall > 0 ? `均 ${speaking.avgOverall.toFixed(1)}` : "未尝试"} module="speaking" />
             </div>
           </div>
         </>
@@ -197,21 +198,24 @@ export default async function DashboardHomePage() {
 }
 
 function ModuleCard({
-  label, href, icon: Icon, value, sub, module,
+  label, href, icon: Icon, value, sub, module, index = 0,
 }: {
-  label: string; href: string; icon: typeof Languages; value: number; sub: string; module: string;
+  label: string; href: string; icon: typeof Languages; value: number; sub: string; module: string; index?: number;
 }) {
   const grad = moduleGradients[module];
   return (
     <Link href={href} className="group block">
-      <div className="relative overflow-hidden rounded-xl border bg-card p-4 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
-        <div className={`absolute inset-0 bg-gradient-to-br ${grad} opacity-0 transition-opacity group-hover:opacity-5`} />
+      <div
+        className="stagger-item relative overflow-hidden rounded-xl border border-border/60 bg-card p-4 shadow-card transition-all duration-200 hover:-translate-y-1 hover:shadow-glow"
+        style={{ animationDelay: `${index * 60}ms` }}
+      >
+        <div className={`absolute inset-0 bg-gradient-to-br ${grad} opacity-0 transition-opacity group-hover:opacity-[0.07]`} />
         <div className="relative">
-          <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${grad} text-white shadow-soft`}>
+          <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${grad} text-white shadow-soft transition-transform group-hover:scale-105`}>
             <Icon className="h-4 w-4" />
           </div>
           <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="text-2xl font-bold">{value}</div>
+          <div className="font-display nums text-2xl font-bold">{value}</div>
           <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>
         </div>
       </div>

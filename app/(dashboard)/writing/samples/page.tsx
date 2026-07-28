@@ -21,11 +21,22 @@ export default function SamplesPage() {
           </Link>
         </Button>
         <h1 className="mt-2 text-3xl font-bold">范文库</h1>
-        <p className="text-muted-foreground">Band 6 / 7 / 8 三档对照，每段带专家点评</p>
+        <p className="text-muted-foreground">Task 2 议论文 + Task 1 图表 · Band 6 / 7 / 8 对照，每段带专家点评</p>
       </div>
 
-      <div className="space-y-6">
-        {SAMPLE_ESSAYS.sort((a, b) => a.band - b.band).map((s) => {
+      {([
+        { task: "task2" as const, title: "Task 2 · 议论文", desc: "250+ 词，观点/利弊/问题解决/双问题" },
+        { task: "task1" as const, title: "Task 1 · 图表与流程", desc: "150+ 词，柱状/折线/流程图" },
+      ]).map((group) => {
+        const essays = SAMPLE_ESSAYS.filter((s) => s.task === group.task).sort((a, b) => a.band - b.band);
+        if (essays.length === 0) return null;
+        return (
+          <div key={group.task} className="space-y-4">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h2 className="text-xl font-semibold">{group.title}</h2>
+              <span className="text-xs text-muted-foreground">{group.desc}</span>
+            </div>
+            {essays.map((s) => {
           const paragraphs = s.content.split(/\n\s*\n/).filter((p) => p.trim());
           return (
             <Card key={s.id}>
@@ -63,7 +74,9 @@ export default function SamplesPage() {
             </Card>
           );
         })}
-      </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

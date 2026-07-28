@@ -5,7 +5,8 @@
 @layer base {
   :root {
     /* 主色：清爽学术蓝紫渐变 */
-    --background: 0 0% 100%;
+    /* 页面底色微染冷灰，让纯白卡片浮起来 */
+    --background: 240 33% 99%;
     --foreground: 224 71% 4%;
     --card: 0 0% 100%;
     --card-foreground: 224 71% 4%;
@@ -86,8 +87,10 @@
       "Inter", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
   }
 
-  /* 更好的中英混排 */
+  /* 更好的中英混排：标题统一走展示字体（Sora），中文自动回落系统字体 */
   h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display), -apple-system, BlinkMacSystemFont,
+      "PingFang SC", "Microsoft YaHei", sans-serif;
     letter-spacing: -0.02em;
   }
 
@@ -140,12 +143,23 @@
     color: transparent;
   }
 
+  /* 展示字体：标题与数字。数字用等宽对齐（tabular），大数字更整齐 */
+  .font-display {
+    font-family: var(--font-display), -apple-system, BlinkMacSystemFont,
+      "PingFang SC", "Microsoft YaHei", sans-serif;
+    letter-spacing: -0.01em;
+  }
+  .nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
   /* 卡片悬浮效果 */
   .card-hoverable {
     @apply transition-all duration-200;
   }
   .card-hoverable:hover {
-    @apply -translate-y-0.5 shadow-lg;
+    @apply -translate-y-0.5 shadow-card;
   }
 
   /* 网格背景 */
@@ -154,6 +168,13 @@
       linear-gradient(to right, hsl(var(--border) / 0.4) 1px, transparent 1px),
       linear-gradient(to bottom, hsl(var(--border) / 0.4) 1px, transparent 1px);
     background-size: 32px 32px;
+  }
+
+  /* Hero 光晕：两团柔光叠在渐变上，比纯网格更有层次 */
+  .bg-hero-glow {
+    background-image:
+      radial-gradient(60% 90% at 85% 10%, rgb(255 255 255 / 0.22), transparent 60%),
+      radial-gradient(50% 80% at 10% 100%, rgb(255 255 255 / 0.12), transparent 55%);
   }
 
   /* 动画进入 */
@@ -170,5 +191,11 @@
   @keyframes slideUp {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* 逐个入场：配合 style={{animationDelay}} 做卡片错峰浮现 */
+  .stagger-item {
+    opacity: 0;
+    animation: slideUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 }

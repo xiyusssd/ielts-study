@@ -19,6 +19,10 @@ const schema = z.object({
 
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.string().default("https://api.openai.com/v1"),
+  // 文本能力(chat/chatJSON)专用凭据：留空则回落到上面的通用 OPENAI_*。
+  // 用途：文本走第三方路由(如 airouter),语音/口语仍走官方 OpenAI。
+  OPENAI_TEXT_API_KEY: z.string().optional(),
+  OPENAI_TEXT_BASE_URL: z.string().optional(),
   OPENAI_TEXT_MODEL: z.string().default("gpt-4o"),
   OPENAI_TTS_MODEL: z.string().default("tts-1"),
   OPENAI_STT_MODEL: z.string().default("whisper-1"),
@@ -59,7 +63,11 @@ export function providerReady(kind: "text" | "voice" | "stt" | "realtime"): bool
     realtime: env.AI_REALTIME_PROVIDER,
   };
   const p = map[kind];
-  if (p === "openai") return !!env.OPENAI_API_KEY;
+  if (p === "openai") {
+    // 文本能力认文本专用 key(回落通用);其余能力认通用 key
+    if (kind === "text") return !!(env.OPENAI_TEXT_API_KEY || env.OPENAI_API_KEY);
+    return !!env.OPENAI_API_KEY;
+  }
   if (p === "anthropic") return !!env.ANTHROPIC_API_KEY;
   if (p === "ollama") return true;
   return false;

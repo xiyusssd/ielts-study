@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { generateDailyQueue } from "@/lib/srs/queue";
 import { DEFAULT_DAILY_NEW, DEFAULT_DAILY_REVIEW } from "@/lib/vocab/config";
 import { DailyGoals } from "@/components/vocab/daily-goals";
+import { BookPicker } from "@/components/vocab/book-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,9 +29,10 @@ export default async function VocabPage() {
   const profile = await prisma.profile.findUnique({ where: { userId: user.id } });
   const dailyNew = profile?.dailyNewWords ?? DEFAULT_DAILY_NEW;
   const dailyReview = profile?.dailyReviewWords ?? DEFAULT_DAILY_REVIEW;
+  const lockedBook = profile?.vocabBook ?? null; // 锁定词书：今日新词只从该书抽
 
   const [queue, totalLearned, byLevel, recent] = await Promise.all([
-    generateDailyQueue(user.id, { newLimit: dailyNew, reviewLimit: dailyReview }),
+    generateDailyQueue(user.id, { newLimit: dailyNew, reviewLimit: dailyReview, source: lockedBook ?? undefined }),
     prisma.vocabProgress.count({ where: { userId: user.id } }),
     prisma.$queryRawUnsafe<{ level: number; c: bigint }[]>(
       `SELECT w.level, COUNT(*) as c FROM VocabProgress vp
@@ -90,12 +92,20 @@ export default async function VocabPage() {
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>
-                <Button asChild size="sm" variant="outline" className="border-white/50 bg-transparent text-white hover:bg-white/10">
-                  <Link href="/vocab/study?mode=spell">
-                    <PenLine className="h-4 w-4" />
-                    拼写模式
-                  </Link>
-                </Button>
+                <div className="flex gap-2">
+                  <Button asChild size="sm" variant="outline" className="flex-1 border-white/50 bg-transparent text-white hover:bg-white/10">
+                    <Link href="/vocab/study?mode=spell">
+                      <PenLine className="h-4 w-4" />
+                      单词拼写
+                    </Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline" className="flex-1 border-white/50 bg-transparent text-white hover:bg-white/10">
+                    <Link href="/vocab/study?mode=sentence">
+                      <PenLine className="h-4 w-4" />
+                      句子拼写
+                    </Link>
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="rounded-lg bg-white/10 px-4 py-2 text-sm backdrop-blur">今日已清空 🎉</div>
@@ -159,6 +169,8 @@ export default async function VocabPage() {
           </CardContent>
         </Card>
       </div>
+
+      <BookPicker current={lockedBook} counts={Object.fromEntries(srcCounts.map((s) => [s.key, s.n]))} />
 
       <DailyGoals newWords={dailyNew} reviewWords={dailyReview} />
 

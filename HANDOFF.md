@@ -1,3 +1,29 @@
+# ⭐⭐⭐ 最新状态(2026-07-28) · UI升级 + 听力重构 + airouter文本 + 词书锁定 + 句子拼写 + 换AI句
+
+**本轮完成(全部本地,未提交)**:
+
+1. **UI 升级**:Sora 展示字体(`app/layout.tsx` next/font)+ tabular 数字 + 分层阴影 + 页面底色微染 + 侧栏渐变竖条。改 `globals.css`/`tailwind.config.ts`/`card.tsx`/`sidebar.tsx`/首页。
+2. **听力页重构**:`app/(dashboard)/listening/page.tsx` 从"32 卡按钮墙"改为按剑桥册/VOA/内置**分组紧凑列表**,整行可点=做题,小耳朵=精听。修了 "Section undefined" 老 bug。
+3. **airouter 文本接入**:文本能力(写作/口语批改)走 airouter,语音仍走官方 OpenAI。
+   - `lib/env.ts` 加 `OPENAI_TEXT_API_KEY/_BASE_URL`(留空回落通用);`lib/ai/providers/openai.ts` 加 `getTextClient()` + `extractJSON()` 兜底(Claude 系不强制 schema)。
+   - `.env` 已填:airouter=`https://airouter.linkof.link/v1` model=`gpt-5.6-sol`。语音三能力因没填官方 key 显示未启用(正常)。
+4. **词书锁定(持久)**:`Profile.vocabBook` 字段(已 db push + build 脚本 add_col)。词汇页"学习词书"卡片可锁定,今日队列新词只从该书抽。`BookPicker` 组件 + `saveVocabBook` action + `VOCAB_BOOKS` 常量。
+5. **句子拼写**:词汇第三种模式(翻卡/单词拼写/句子拼写循环切换)。`SentenceCard` 组件:看中文↔纯听写可切、整句输入、宽松判分(去标点/大小写)+ 逐词 diff。用词自带例句。
+6. **换 AI 句(新,⚠️ 仅网页端,未进 .app)**:句子拼写里"换 AI 句"按钮现场生成新例句(走 airouter)。`generateExampleSentence`(`lib/ai/content-gen.ts`,已做键名归一化兜底)+ `app/api/vocab/gen-sentence/route.ts`(登录+限流+providerReady门)。已直连实测生成成功。
+
+**同步状态**:
+- 1-5 已进 **.app**(最后重打包 16:30,402M,在 `dist/雅思学习助手.app`)。**.app 页面 500 老坑已根治**(是反复重启攒的 7 个僵尸 dev 进程污染 `.next`,已清零;打包务必先杀净 next 进程再独占 build)。
+- **6(换AI句)仅在网页端**,要进 .app 需再重打包一次。
+
+**晚上待续**:
+- [ ] 网页端 UI 实测"换 AI 句"(白天测试账号今日队列空,只做了直连验证;需有新词/复习词时进句子拼写点按钮看效果)
+- [ ] **Electron 独立窗口**(用户选了 Electron 跨平台,tasks 未动):electron 主进程 spawn 打包内 node22 跑 server.js→等 health→BrowserWindow 加载 localhost;electron-builder 打包;体积会 +~150MB。Rust/swiftc/Xcode CLT 都在但选了 Electron。关键坑:Prisma 原生引擎用 spawn 子进程跑(别在 Electron 主进程 require)。
+- [ ] 全做完再重打包 .app 同步 6 + Electron
+
+**两端现状**:dev 网页 3000 / .app 3001,都健康。改动全未 commit。node 走 `~/.local/node22/bin`,dev 用 `./scripts/dev.sh`。
+
+---
+
 # ⭐⭐⭐ 最新状态(2026-07-27) · 剑11+剑12 阅读 24 篇全部完成
 
 **本轮完成(内容在本地 skip-worktree,未提交/未 push)**:

@@ -3,7 +3,9 @@ import { getEnv } from "@/lib/env";
 import type { AIProvider, ChatMessage, ChatOptions, ChatResult, RealtimeToken } from "@/lib/ai/provider";
 
 let client: OpenAI | null = null;
+let textClient: OpenAI | null = null;
 
+// 语音/STT/realtime 用：始终走官方 OpenAI(OPENAI_*)
 function getClient(): OpenAI {
   if (client) return client;
   const env = getEnv();
@@ -12,12 +14,38 @@ function getClient(): OpenAI {
   return client;
 }
 
+// 文本 chat/chatJSON 用：优先文本专用凭据(如 airouter),留空回落官方
+function getTextClient(): OpenAI {
+  if (textClient) return textClient;
+  const env = getEnv();
+  const apiKey = env.OPENAI_TEXT_API_KEY || env.OPENAI_API_KEY;
+  const baseURL = env.OPENAI_TEXT_BASE_URL || env.OPENAI_BASE_URL;
+  if (!apiKey) throw new Error("OPENAI_TEXT_API_KEY / OPENAI_API_KEY 未配置");
+  textClient = new OpenAI({ apiKey, baseURL });
+  return textClient;
+}
+
+// 第三方路由(Claude 系)常把 JSON 包在 ```json 围栏或夹带解释文字里，
+// OpenAI 官方 strict schema 则直接返回纯 JSON。统一在这里扒出 JSON 主体。
+function extractJSON(raw: string): string {
+  let s = raw.trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) s = fence[1].trim();
+  const first = s.search(/[[{]/);
+  if (first > 0) s = s.slice(first);
+  const lastObj = s.lastIndexOf("}");
+  const lastArr = s.lastIndexOf("]");
+  const last = Math.max(lastObj, lastArr);
+  if (last >= 0 && last < s.length - 1) s = s.slice(0, last + 1);
+  return s.trim();
+}
+
 export const openaiProvider: AIProvider = {
   name: "openai",
 
   async chat(messages: ChatMessage[], opts: ChatOptions = {}): Promise<ChatResult> {
     const env = getEnv();
-    const c = getClient();
+    const c = getTextClient();
     const res = await c.chat.completions.create(
       {
         model: env.OPENAI_TEXT_MODEL,
@@ -37,11 +65,17 @@ export const openaiProvider: AIProvider = {
 
   async chatJSON<T>(messages: ChatMessage[], schema: unknown, opts: ChatOptions = {}): Promise<T> {
     const env = getEnv();
-    const c = getClient();
+    const c = getTextClient();
+    // 官方 OpenAI 支持 strict json_schema；第三方路由(Claude 系)可能忽略它，
+    // 所以再在末尾追加一条系统级指令强制只输出 JSON，双保险。
+    const withJsonHint: ChatMessage[] = [
+      ...messages,
+      { role: "system", content: "只输出符合要求的 JSON，不要任何解释、前后缀或 markdown 代码围栏。" },
+    ];
     const res = await c.chat.completions.create(
       {
         model: env.OPENAI_TEXT_MODEL,
-        messages,
+        messages: withJsonHint,
         temperature: opts.temperature ?? 0.2,
         max_tokens: opts.maxTokens,
         response_format: {
@@ -52,7 +86,12 @@ export const openaiProvider: AIProvider = {
       { signal: opts.signal },
     );
     const content = res.choices[0]?.message?.content ?? "{}";
-    return JSON.parse(content) as T;
+    try {
+      return JSON.parse(content) as T;
+    } catch {
+      // 路由未强制 schema，返回了围栏/夹带文字——扒出 JSON 主体再解析
+      return JSON.parse(extractJSON(content)) as T;
+    }
   },
 
   async tts(text: string, opts = {}): Promise<Uint8Array> {
