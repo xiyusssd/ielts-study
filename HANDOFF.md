@@ -1,3 +1,20 @@
+# ⭐⭐⭐ 最新状态(2026-07-28 续3) · Electron 独立窗口打包完成 · 已 commit(未 push)
+
+**本轮完成并已提交(未 push)**:
+
+- **Electron 独立窗口版**(commit `8e533b5` + `2969066`),与现有浏览器版 .app **并存**,只做 macOS arm64。
+  - 架构:Electron 主进程只做窗口壳,spawn 内嵌 node22 跑 standalone `server.js`,**Prisma 原生引擎完全隔离在子进程,绕过 macOS Library Validation**。等 `/api/health` 就绪后 `BrowserWindow.loadURL(127.0.0.1:PORT)`。主进程放行麦克风(setPermissionRequestHandler + askForMediaAccess)。
+  - 文件:`electron/main.js`(窗口/端口/health/spawn/权限/退出清理)、`electron/db-init.js`(移植 launcher 的 DB 初始化/内容指纹同步/schema 补列/buildEnv,sqlite 走系统 /usr/bin/sqlite3,零原生依赖)、`electron/after-pack.js`、`electron-builder.yml`、`build/entitlements.mac.plist`、`scripts/build-electron-app.sh`。package.json 加 main + electron:dev/build + devDeps(electron@43.2.0 / electron-builder@26.15.3)。
+  - **关键坑已修**(afterPack):electron-builder 把 standalone 的 node_modules 收进 app.asar,而 node22 无法从 asar require → 打包产物 `Cannot find module 'next'`。dev 态/仓库内测试会**假性通过**(node 向上遍历找到仓库根 node_modules),**必须拷到 /tmp 脱离仓库验证**。afterPack hook 用 cp -R 把 standalone node_modules 复制到 Resources/app/node_modules(与 server.js 同级)修复。
+  - **验证**:dev 态 `electron .` 弹窗+加载+server Ready+退出清理子进程无残留;打包产物拷到 /tmp 脱离仓库,`node server.js`→`/api/health` 返回 `{ok:true,db.words:5031,text:true}`,prisma 引擎正常。tsc 0 错误。
+  - 产物:`dist-electron/雅思学习助手-0.1.0-arm64.dmg`(**456M**,gitignore)。未签名/未公证(本地自用,右键打开)。
+  - **⚠️ 待优化**:app.asar 含 ~303M 冗余 node_modules(electron-builder 按 package.json dependencies 自动收集,主进程其实用不到),让 dmg 偏大。后续可通过 files/dependencies 调整瘦身(不影响功能)。
+  - 打包命令:`pnpm electron:build`(或 `./scripts/build-electron-app.sh`);dev 自测 `pnpm electron:dev`。
+
+**本地所有 commit(未 push)**:`1ab584a` 写作扩充+句子拼写四项 → `c0f9d33` HANDOFF → `c1ffc70` 句子完成页 bug → `8e533b5` Electron → `2969066` afterPack 修复。push 须走版权 stub 流程。
+
+---
+
 # ⭐⭐⭐ 最新状态(2026-07-28 续) · 写作扩充 + 句子拼写四项加强 · 已 commit 1ab584a(未 push)
 
 **本轮完成并已提交(commit `1ab584a`,23 文件 +639/-125,未 push)**:
