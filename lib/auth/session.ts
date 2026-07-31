@@ -1,6 +1,7 @@
 import { getIronSession, type SessionOptions } from "iron-session";
 import { cookies } from "next/headers";
 import { getEnv } from "@/lib/env";
+import { prisma } from "@/lib/db";
 
 export type SessionData = {
   userId?: string;
@@ -31,5 +32,11 @@ export async function requireUser() {
   if (!session.userId) {
     return null;
   }
-  return { id: session.userId, email: session.email! };
+  // 校验用户仍存在（防止重建库后旧 cookie 指向已删除用户，写外键时报错）
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true, email: true },
+  });
+  if (!user) return null;
+  return { id: user.id, email: user.email };
 }

@@ -15,7 +15,18 @@ export function PWAInit() {
 
   useEffect(() => {
     // 注册 Service Worker
-    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
+    // Electron 版本：本地 server 常在线，SW 离线缓存无价值，且换包后旧 chunk 缓存
+    // 会导致 "Failed to find Server Action"。检测到 Electron 则不注册，并清理历史注册。
+    const isElectron = /electron/i.test(navigator.userAgent);
+    if ("serviceWorker" in navigator && isElectron) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((r) => r.unregister());
+      });
+      if ("caches" in window) {
+        caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+      }
+    } else if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
+      // 浏览器 PWA 版：注册 SW（离线支持）
       window.addEventListener("load", () => {
         navigator.serviceWorker
           .register("/sw.js", { scope: "/" })

@@ -13,8 +13,10 @@ export function SignupForm() {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  async function onSubmit(fd: FormData) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setError(null);
+    const fd = new FormData(e.currentTarget);
     start(async () => {
       const res = await signup(fd);
       if (res && "ok" in res && !res.ok) {
@@ -34,7 +36,8 @@ export function SignupForm() {
       </div>
 
       <Card>
-        <form action={onSubmit}>
+        {/* 同 login-form：未 hydrate 时兜底走 POST，避免密码进 URL */}
+        <form method="post" onSubmit={onSubmit}>
           <CardContent className="space-y-4 p-6">
             <div className="space-y-2">
               <Label htmlFor="email">邮箱</Label>
