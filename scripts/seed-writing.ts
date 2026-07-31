@@ -4,29 +4,18 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { WRITING_PROMPTS } from "../lib/writing/seed-prompts";
+import { ensureWritingPrompt, tally, type Outcome } from "../lib/content/write";
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log("🌱 写作题库 seed 开始...");
-  let created = 0, skipped = 0;
 
+  const outcomes: Outcome[] = [];
   for (const p of WRITING_PROMPTS) {
-    const existing = await prisma.writingPrompt.findFirst({
-      where: { prompt: { startsWith: p.prompt.slice(0, 50) } },
-    });
-    if (existing) { skipped++; continue; }
-    await prisma.writingPrompt.create({
-      data: {
-        task: p.task,
-        category: p.category,
-        prompt: p.prompt,
-        minWords: p.minWords,
-        timeMinutes: p.timeMinutes,
-      },
-    });
-    created++;
+    outcomes.push(await ensureWritingPrompt(prisma, p));
   }
+  const { created, skipped } = tally(outcomes);
 
   const [t1, t2] = await Promise.all([
     prisma.writingPrompt.count({ where: { task: "task1" } }),

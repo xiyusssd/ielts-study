@@ -5,39 +5,33 @@
 
 import { PrismaClient } from "@prisma/client";
 import { SEED_WORDS } from "../lib/vocab/seed-words";
+import { ensureWord, tally, type Outcome } from "../lib/content/write";
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log("🌱 词表 seed 开始...");
 
-  let created = 0;
-  let skipped = 0;
-
+  const outcomes: Outcome[] = [];
   for (const w of SEED_WORDS) {
-    const existing = await prisma.word.findUnique({ where: { spelling: w.spelling } });
-    if (existing) {
-      skipped++;
-      continue;
-    }
-    await prisma.word.create({
-      data: {
+    outcomes.push(
+      await ensureWord(prisma, {
         spelling: w.spelling,
         ipa: w.ipa,
-        translations: JSON.stringify(w.translations),
-        examples: JSON.stringify(w.examples),
+        translations: w.translations,
+        examples: w.examples,
         level: w.level,
         tags: (w.tags ?? []).join(","),
-      },
-    });
-    created++;
+      }),
+    );
   }
+  const { created, updated } = tally(outcomes);
 
   const total = await prisma.word.count();
   const byLevel = await prisma.$queryRawUnsafe(
     `SELECT level, COUNT(*) as c FROM Word GROUP BY level ORDER BY level`,
   );
-  console.log(`✅ 新增 ${created}，跳过 ${skipped}，DB 中共 ${total} 词`);
+  console.log(`✅ 新增 ${created}，更新 ${updated}，DB 中共 ${total} 词`);
   console.log("   按等级分布：", byLevel);
 }
 

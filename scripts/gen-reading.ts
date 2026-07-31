@@ -4,6 +4,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { generateReadingPassage } from "../lib/ai/content-gen";
+import { ensurePassage } from "../lib/content/write";
 
 const prisma = new PrismaClient();
 
@@ -15,30 +16,20 @@ async function main() {
   const gen = await generateReadingPassage({ targetBand, topic });
   console.log(`  ✓ ${gen.title} — ${gen.questions.length} 题`);
 
+  // AI 产出无自然键可依，用生成时刻当 source；每次生成都是一篇新内容
   const source = `ai-${Date.now()}`;
-  await prisma.passage.create({
-    data: {
-      source,
-      module: "reading",
-      title: gen.title,
-      content: gen.content,
-      metadata: JSON.stringify({
-        difficulty: targetBand,
-        wordCount: gen.content.split(/\s+/).length,
-        topics: gen.topics,
-        aiGenerated: true,
-      }),
-      questions: {
-        create: gen.questions.map((q) => ({
-          index: q.index,
-          type: q.type,
-          prompt: q.prompt,
-          options: q.options ? JSON.stringify(q.options) : null,
-          answer: JSON.stringify(q.answer),
-          explanation: q.explanation ?? null,
-        })),
-      },
+  await ensurePassage(prisma, {
+    source,
+    module: "reading",
+    title: gen.title,
+    content: gen.content,
+    metadata: {
+      difficulty: targetBand,
+      wordCount: gen.content.split(/\s+/).length,
+      topics: gen.topics,
+      aiGenerated: true,
     },
+    questions: gen.questions,
   });
   console.log(`✅ 已入库 (source=${source})`);
 }

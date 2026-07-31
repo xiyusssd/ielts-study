@@ -4,26 +4,18 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { SPEAKING_PROMPTS } from "../lib/speaking/seed-prompts";
+import { ensureSpeakingPrompt, tally, type Outcome } from "../lib/content/write";
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log("🌱 口语题库 seed 开始...");
-  let created = 0, skipped = 0;
 
-  await prisma.speakingPrompt.deleteMany({});
-
+  const outcomes: Outcome[] = [];
   for (const p of SPEAKING_PROMPTS) {
-    await prisma.speakingPrompt.create({
-      data: {
-        part: p.part,
-        topic: p.topic,
-        question: p.question,
-        followUps: p.followUps ? JSON.stringify(p.followUps) : null,
-      },
-    });
-    created++;
+    outcomes.push(await ensureSpeakingPrompt(prisma, p));
   }
+  const { created, skipped } = tally(outcomes);
 
   const [p1, p2, p3] = await Promise.all([
     prisma.speakingPrompt.count({ where: { part: 1 } }),

@@ -10,6 +10,7 @@ import { PrismaClient } from "@prisma/client";
 import cambridgeReading from "../lib/assessment/data/cambridge-reading.json";
 import cambridgeListening from "../lib/assessment/data/cambridge-listening.json";
 import voaArticles from "../lib/assessment/data/voa-articles.json";
+import { ensurePassage, type PassageInput, type QuestionInput } from "../lib/content/write";
 
 const prisma = new PrismaClient();
 
@@ -27,17 +28,19 @@ const LETTERS = "ABCDEFGHIJ";
 const TFNG_OPTIONS = ["TRUE", "FALSE", "NOT GIVEN"];
 const YNG_OPTIONS = ["YES", "NO", "NOT GIVEN"];
 
-/** 转成 study 模块 Question 行 */
-function toQuestionRows(questions: PoolQ[]) {
+/**
+ * pools 里的题目 → study 模块的题目输入。
+ * 只做内容变换（判分口径），序列化和主键由 lib/content/write 负责。
+ */
+function toQuestionRows(questions: PoolQ[]): QuestionInput[] {
   // 雅思 tfng 有两套按钮：信息类 TRUE/FALSE/NOT GIVEN vs 观点类 YES/NO/NOT GIVEN。
   // 单篇内不混用（已核验），故按整篇判定：出现 YES/NO 即整篇用 YNG。
   const tfngIsYNG = questions.some(
     (q) => q.type === "tfng" && (q.answer === "YES" || q.answer === "NO"),
   );
   return questions.map((q, idx) => {
-    let type = q.type as string;
-    let options: string | null = null;
-    let answer: string;
+    let options: string[] | null = null;
+    let answer: unknown;
     if (q.type === "mcq" && q.options) {
       // study 模块 mcq 按字母判分：答案 = 正确选项的字母
       // IN EITHER ORDER 题(accept 列了兄弟选项)转成字母数组,任一字母都算对
@@ -46,107 +49,90 @@ function toQuestionRows(questions: PoolQ[]) {
         return pos >= 0 ? LETTERS[pos] : v;
       };
       const letters = [q.answer, ...(q.accept ?? [])].map(toLetter);
-      options = JSON.stringify(q.options);
-      answer = JSON.stringify(letters.length > 1 ? letters : letters[0]);
+      options = q.options;
+      answer = letters.length > 1 ? letters : letters[0];
     } else if (q.type === "gapfill") {
       const all = [q.answer, ...(q.accept ?? [])];
-      answer = JSON.stringify(all.length > 1 ? all : q.answer);
+      answer = all.length > 1 ? all : q.answer;
     } else {
       // tfng：把正确按钮集存进 options，答题页据此渲染（不泄漏答案）
-      options = JSON.stringify(tfngIsYNG ? YNG_OPTIONS : TFNG_OPTIONS);
-      answer = JSON.stringify(q.answer);
+      options = tfngIsYNG ? YNG_OPTIONS : TFNG_OPTIONS;
+      answer = q.answer;
     }
-    return {
-      index: idx + 1,
-      type,
-      prompt: q.prompt,
-      options,
-      answer,
-      explanation: null as string | null,
-    };
+    return { index: idx + 1, type: q.type as string, prompt: q.prompt, options, answer };
   });
 }
 
-async function upsertPassage(opts: {
-  source: string;
-  module: string;
-  title: string;
-  content: string;
-  metadata: object;
-  audioPath?: string | null;
-  questions: PoolQ[];
-}) {
-  const existing = await prisma.passage.findFirst({ where: { source: opts.source } });
-  if (existing) return false;
-  await prisma.passage.create({
-    data: {
-      source: opts.source,
-      module: opts.module,
-      title: opts.title,
-      content: opts.content,
-      audioPath: opts.audioPath ?? null,
-      metadata: JSON.stringify(opts.metadata),
-      questions: { create: toQuestionRows(opts.questions) },
-    },
-  });
-  return true;
-}
+type CambridgeReading = { id: string; title: string; content: string; questions: PoolQ[] };
+type CambridgeListening = { id: string; title: string; intro: string; questions: PoolQ[] };
+type VoaArticle = { id: string; title: string; text: string; questions: PoolQ[] };
 
-async function main() {
-  let created = 0;
+const wordsIn = (text: string) => text.split(/\s+/).length;
 
-  // 1. 剑桥阅读 12 篇
-  for (const s of cambridgeReading as { id: string; title: string; content: string; questions: PoolQ[] }[]) {
-    const ok = await upsertPassage({
+/**
+ * 四批内容，各自声明「怎么映射成一篇 passage」。
+ * 注意 VOA 同一篇文章会进两次：阅读版（voa:）和听力版（voa-listen:），
+ * source 前缀不同，因此 id 也不同，互不覆盖。
+ */
+const BATCHES: { label: string; passages: PassageInput[] }[] = [
+  {
+    label: "剑桥阅读",
+    passages: (cambridgeReading as CambridgeReading[]).map((s) => ({
       source: `cambridge:${s.id}`,
       module: "reading",
       title: s.title,
       content: s.content,
-      metadata: { difficulty: 7, wordCount: s.content.split(/\s+/).length, topics: ["剑桥真题"] },
-      questions: s.questions,
-    });
-    if (ok) created++;
-  }
-
-  // 2. VOA 阅读 6 篇
-  for (const a of voaArticles as { id: string; title: string; text: string; questions: PoolQ[] }[]) {
-    const ok = await upsertPassage({
+      metadata: { difficulty: 7, wordCount: wordsIn(s.content), topics: ["剑桥真题"] },
+      questions: toQuestionRows(s.questions),
+    })),
+  },
+  {
+    label: "VOA 阅读",
+    passages: (voaArticles as VoaArticle[]).map((a) => ({
       source: `voa:${a.id}`,
       module: "reading",
       title: a.title,
       content: a.text,
-      metadata: { difficulty: 6, wordCount: a.text.split(/\s+/).length, topics: ["VOA"] },
-      questions: a.questions,
-    });
-    if (ok) created++;
-  }
-
-  // 3. 剑桥听力 4 套(真人音频)
-  for (const s of cambridgeListening as { id: string; title: string; intro: string; questions: PoolQ[] }[]) {
-    const ok = await upsertPassage({
+      metadata: { difficulty: 6, wordCount: wordsIn(a.text), topics: ["VOA"] },
+      questions: toQuestionRows(a.questions),
+    })),
+  },
+  {
+    label: "剑桥听力",
+    passages: (cambridgeListening as CambridgeListening[]).map((s) => ({
       source: `cambridge:${s.id}`,
       module: "listening",
       title: s.title,
       content: s.intro,
       audioPath: `/audio/listening/${s.id}.m4a`,
       metadata: { difficulty: 7, wordCount: 0, topics: ["剑桥真题"] },
-      questions: s.questions,
-    });
-    if (ok) created++;
-  }
-
-  // 4. VOA 听力 6 篇(真人音频)
-  for (const a of voaArticles as { id: string; title: string; text: string; questions: PoolQ[] }[]) {
-    const ok = await upsertPassage({
+      questions: toQuestionRows(s.questions),
+    })),
+  },
+  {
+    label: "VOA 听力",
+    passages: (voaArticles as VoaArticle[]).map((a) => ({
       source: `voa-listen:${a.id}`,
       module: "listening",
       title: a.title,
       content: a.text,
       audioPath: `/audio/listening/voa-${a.id}.m4a`,
       metadata: { difficulty: 6, wordCount: 0, topics: ["VOA"] },
-      questions: a.questions,
-    });
-    if (ok) created++;
+      questions: toQuestionRows(a.questions),
+    })),
+  },
+];
+
+async function main() {
+  let created = 0;
+
+  for (const batch of BATCHES) {
+    let n = 0;
+    for (const p of batch.passages) {
+      if ((await ensurePassage(prisma, p)) === "created") n++;
+    }
+    created += n;
+    console.log(`  ${batch.label}: 新增 ${n}/${batch.passages.length}`);
   }
 
   const r = await prisma.passage.count({ where: { module: "reading" } });

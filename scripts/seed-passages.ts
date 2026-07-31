@@ -4,43 +4,27 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { ALL_SEED_PASSAGES } from "../lib/reading/seed-passages";
+import { ensurePassage, tally, type Outcome } from "../lib/content/write";
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log("🌱 阅读题库 seed 开始...");
 
-  let created = 0;
-  let skipped = 0;
-
+  const outcomes: Outcome[] = [];
   for (const sp of ALL_SEED_PASSAGES) {
-    const existing = await prisma.passage.findFirst({ where: { source: sp.source } });
-    if (existing) {
-      skipped++;
-      continue;
-    }
-    await prisma.passage.create({
-      data: {
-        source: sp.source,
-        module: "reading",
-        title: sp.title,
-        content: sp.content,
-        metadata: JSON.stringify(sp.metadata),
-        questions: {
-          create: sp.questions.map((q) => ({
-            index: q.index,
-            type: q.type,
-            prompt: q.prompt,
-            options: q.options ? JSON.stringify(q.options) : null,
-            answer: JSON.stringify(q.answer),
-            explanation: q.explanation ?? null,
-          })),
-        },
-      },
+    const outcome = await ensurePassage(prisma, {
+      source: sp.source,
+      module: "reading",
+      title: sp.title,
+      content: sp.content,
+      metadata: sp.metadata,
+      questions: sp.questions,
     });
-    created++;
-    console.log(`  ✓ ${sp.title} (${sp.questions.length} 题)`);
+    outcomes.push(outcome);
+    if (outcome === "created") console.log(`  ✓ ${sp.title} (${sp.questions.length} 题)`);
   }
+  const { created, skipped } = tally(outcomes);
 
   const total = await prisma.passage.count({ where: { module: "reading" } });
   const qc = await prisma.question.count();

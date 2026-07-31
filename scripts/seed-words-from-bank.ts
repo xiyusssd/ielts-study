@@ -10,8 +10,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import bank from "../lib/assessment/data/vocab-bank.json";
-import fs from "node:fs";
-import path from "node:path";
+import { wordUpsertArgs } from "../lib/content/write";
 
 const prisma = new PrismaClient();
 
@@ -52,23 +51,15 @@ async function main() {
     const batch = picked.slice(i, i + CHUNK);
     await prisma.$transaction(
       batch.map((w) =>
-        prisma.word.upsert({
-          where: { spelling: w.word },
-          create: {
+        prisma.word.upsert(
+          wordUpsertArgs({
             spelling: w.word,
             ipa: w.ipa,
-            translations: JSON.stringify([{ pos: w.pos ?? "", meaning: w.meaning }]),
-            examples: JSON.stringify([]),
+            translations: [{ pos: w.pos ?? "", meaning: w.meaning }],
             level: w.level,
             tags: buildTags(w),
-          },
-          update: {
-            ipa: w.ipa,
-            translations: JSON.stringify([{ pos: w.pos ?? "", meaning: w.meaning }]),
-            level: w.level,
-            tags: buildTags(w),
-          },
-        }),
+          }),
+        ),
       ),
     );
     created += batch.length;
