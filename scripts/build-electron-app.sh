@@ -15,11 +15,12 @@ err() { printf "\033[31m✗\033[0m %s\n" "$*" >&2; }
 
 [ -x "$NODE_BIN" ] || { err "Node 不存在: $NODE_BIN"; exit 1; }
 
-# 1. standalone build
-if [ ! -f .next/standalone/server.js ]; then
-  log "构建 Next.js standalone..."
-  ./node_modules/.bin/next build
-fi
+# 1. standalone build —— 必须每次重建：
+#    dev server 会污染 .next（CSS 404 等），且旧 standalone 会让代码改动进不去包。
+log "清理旧 .next 并重建 Next.js standalone..."
+rm -rf .next
+./node_modules/.bin/next build
+[ -f .next/standalone/server.js ] || { err "standalone 构建失败：找不到 .next/standalone/server.js"; exit 1; }
 ok "standalone 就位"
 
 mkdir -p build

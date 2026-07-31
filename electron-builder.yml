@@ -20,8 +20,10 @@ extraResources:
     to: app/.next/static
   - from: public
     to: app/public
-  - from: prisma
-    to: app/prisma
+  - from: prisma/schema.prisma
+    to: app/prisma/schema.prisma
+  - from: content
+    to: app/content
   - from: build/template.db
     to: template.db
   - from: /Users/xiyu/.local/node22/bin/node
