@@ -1,4 +1,4 @@
-# ⭐⭐⭐ 最新状态(2026-07-31) · 修「端口冒充」致内容缺失 · 已重打包并装到 /Applications · 未 commit
+# ⭐⭐⭐ 最新状态(2026-07-31) · 修「端口冒充」致内容缺失 · 已重打包并装到 /Applications · 已全部 commit(未 push)
 
 **用户报「app 内容有问题/数据缺失」,根因不在业务代码,是启动器的端口与身份校验缺陷。**
 
@@ -10,7 +10,7 @@
 
 `localhost` 在本机优先解析 `::1`,Docker 同时监听 `[::]:3000`,而 app 只绑 v4 → 用 `localhost:3000` 访问必然打到 Docker。**14 个 smoke 脚本的 `BASE` 全默认 `localhost:3000`,所以此前冒烟一直在测 Docker,掩盖了问题。**
 
-**本轮修复**(4 处,未 commit):
+**本轮修复**(4 处,commit `1089469`):
 
 - `electron/main.js`:
   - 端口区间 `3000-3020` → **`43110-43140`**,离开公共争用区。
@@ -30,7 +30,7 @@
 
 **安装与清理**:新包已装到 `/Applications/雅思学习助手.app`(675M,已去 quarantine);按用户授权删除了 `dist/`(含旧 `雅思学习助手-1.0.0.dmg` 与旧 .app);现存唯一产物 `dist-electron/雅思学习助手-0.1.0-arm64.dmg`(339M)。
 
-**续:Docker 容器移出 3000**(`docker-compose.yml`,未 commit):
+**续:Docker 容器移出 3000**(`docker-compose.yml`,同 commit `1089469`):
 
 该容器**不是孤儿**,出自本仓库被追踪的 `docker-compose.yml`(v1.0 起就在),是项目正规的 Docker 部署路径,因此没有删除,只挪端口。app 迁到 43110 后,3000 的争用方变成「容器 vs `dev.sh` 的 next dev + 14 个 smoke 脚本」,而 3000 是项目声明的 dev 端口,所以让容器让位:
 
@@ -43,6 +43,30 @@
 访问方式变化:容器实例从 `localhost:3000` 改为 **`127.0.0.1:3100`**。要改回或另选端口,设 `APP_HOST_PORT` 即可(单一旋钮,URL 会跟着变)。
 
 **⚠️ 教训**:后台跑打包不要用 `nohup ... &` 配合极短的前台等待——后台 shell 被回收会带走子进程(本轮第一次打包就这样断在 build 阶段)。直接前台跑并给足超时。
+
+## 本轮 commit 清单(`d0ab358` 之后,全部未 push)
+
+按主题切开,时间正序:
+
+| commit | 主题 |
+| --- | --- |
+| `1089469` | 启动器身份指纹校验 + 端口迁至 43110 + Docker 让出 3000(本段主体) |
+| `691e1ea` | `.gitignore` 补 `template.db` 时间戳备份与 `.claude/`;删根目录误放的 `main.js` 副本 |
+| `43f3095` | 内容主键改为自然键推导的确定性 id,入库出口收拢到 `lib/content/write.ts` |
+| `df68bb3` | AI 层收拢 JSON 解析与错误翻译,收紧超时;新增 `/api/tts` |
+| `57517f3` | 视觉基线微调 + 侧栏可折叠 |
+| `e0db3ad` | 精听/拼写判分与提示节奏;抽出逐词 diff、答题横线、完成页三处共用件 |
+| `538d849` | 换包/重建库后的陈旧客户端状态自愈(SW/caches/session);认证表单补 `method="post"` |
+| `363f9bb` | 口语朗读走 `/api/tts` 真人音并静默降级;实时链路补超时 |
+| `6dc3cde` | 打包每次重建 `.next`;`extraResources` 收窄 `prisma` 并补 `content`;补 `metadataBase` |
+
+**遗留待办**(按优先级):
+
+1. **未 push**:本地 `main` 领先 `origin/main` 17 个 commit,且未设上游跟踪。远端是 `github.com/xiyusssd/ielts-study`。
+2. **`prisma/schema.prisma` 第 15 行仍是 `@default(cuid())`**。实际写入全走 `lib/content/id.ts` 的 `contentId`,所以不出问题,但 schema 与真实约定不一致 —— 绕过 `write.ts` 直接用 Prisma 建内容行就会退回随机 id。
+3. **`extraResources` 的 `from: content` 会打包整个目录**。本机 `content/cambridge-pdfs/`、`content/audio/` 为空,但这两处是版权材料目录 —— 在它们非空的机器上打包会把版权内容装进分发包。
+4. **`app/layout.tsx` 的 `metadataBase` 兜底值是 `http://localhost:3000`**。Electron 下 `buildEnv` 会注入实际端口,不受影响;但这是本仓库仅剩的 `localhost` 硬编码兜底。
+5. **已装包与 HEAD 的唯一差异是 `method="post"`**。`538d849`/`363f9bb`/`6dc3cde` 虽然在装机之后才 commit,但那些改动打包时已在工作区,所以包内**已含** `voiceReady`、SW 自愈、`content/` 与 `probeFree`(逐项 grep 产物确认)。只有认证表单的 `method="post"` 兜底是装机之后才写的,包内没有。它只在 JS 未 hydrate 时才起作用,不影响正常使用。
 
 ---
 

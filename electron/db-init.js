@@ -7,6 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { execFileSync } = require("child_process");
+const { backupAndPrune } = require("./db-backup");
 
 const SQLITE = "/usr/bin/sqlite3";
 
@@ -152,32 +153,16 @@ function syncContent({ dataDb, templateDb, log }) {
       if (n > 0) throw new Error(`${what} 出现 ${n} 条悬空外键`);
     }
 
-    const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
-    fs.copyFileSync(dataDb, `${dataDb}.bak-${stamp}`);
+    const { target, pruned } = backupAndPrune(dataDb, "sync");
     fs.renameSync(shadow, dataDb);
-    pruneBackups(dataDb, log);
-    log(`内容同步完成（备份 data.db.bak-${stamp}）`);
+    if (pruned.length) log(`清理旧备份 ${pruned.length} 份`);
+    log(`内容同步完成（备份 ${path.basename(target)}）`);
     return true;
   } catch (e) {
     fs.rmSync(shadow, { force: true });
     log("内容同步失败，已放弃同步，真实数据未被改动: " + e.message);
     return false;
   }
-}
-
-/** 只保留最近 KEEP_BACKUPS 份自动备份，避免长期运行把磁盘填满。 */
-const KEEP_BACKUPS = 5;
-function pruneBackups(dataDb, log) {
-  const dir = path.dirname(dataDb);
-  const stale = fs
-    .readdirSync(dir)
-    .filter((f) => f.startsWith("data.db.bak-"))
-    .sort()
-    .slice(0, -KEEP_BACKUPS);
-  for (const f of stale) {
-    fs.rmSync(path.join(dir, f), { force: true });
-  }
-  if (stale.length) log(`清理旧备份 ${stale.length} 份`);
 }
 
 // 首启拷贝模板 + 非首启内容同步 + schema 补列
