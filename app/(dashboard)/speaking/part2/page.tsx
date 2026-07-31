@@ -17,5 +17,11 @@ export default async function SpeakingPart2Page() {
     followUps: picked.followUps ? (JSON.parse(picked.followUps) as string[]) : null,
   }];
 
-  return <SpeakingSessionRunner prompts={prompts} aiReady={providerReady("text")} />;
+  return (
+    <SpeakingSessionRunner
+      prompts={prompts}
+      aiReady={providerReady("text")}
+      voiceReady={providerReady("voice")}
+    />
+  );
 }

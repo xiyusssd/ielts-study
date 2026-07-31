@@ -39,6 +39,7 @@ export function RealtimeClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ part }),
+        signal: AbortSignal.timeout(45_000),
       });
       if (!res.ok) throw new Error(await res.text());
       const token = await res.json() as { clientSecret: string; model: string };
@@ -80,15 +81,20 @@ export function RealtimeClient({
             Authorization: `Bearer ${token.clientSecret}`,
             "Content-Type": "application/sdp",
           },
+          signal: AbortSignal.timeout(30_000),
         },
       );
       if (!sdpRes.ok) throw new Error("Realtime SDP 交换失败：" + (await sdpRes.text()));
       const answer = { type: "answer" as const, sdp: await sdpRes.text() };
       await pc.setRemoteDescription(answer);
     } catch (err) {
+      const msg =
+        (err as Error).name === "TimeoutError"
+          ? "连接超时，请检查网络后重试"
+          : (err as Error).message;
       setStatus("error");
-      setError((err as Error).message);
-      toast.error("连接失败：" + (err as Error).message);
+      setError(msg);
+      toast.error("连接失败：" + msg);
     }
   }
 

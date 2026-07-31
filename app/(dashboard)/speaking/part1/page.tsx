@@ -18,5 +18,11 @@ export default async function SpeakingPart1Page() {
     followUps: p.followUps ? (JSON.parse(p.followUps) as string[]) : null,
   }));
 
-  return <SpeakingSessionRunner prompts={prompts} aiReady={providerReady("text")} />;
+  return (
+    <SpeakingSessionRunner
+      prompts={prompts}
+      aiReady={providerReady("text")}
+      voiceReady={providerReady("voice")}
+    />
+  );
 }

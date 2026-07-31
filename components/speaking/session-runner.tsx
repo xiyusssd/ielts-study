@@ -6,7 +6,7 @@ import { submitSpeakingSession, type SessionTurn } from "@/lib/speaking/actions"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, SkipForward, Volume2, ChevronRight, Timer } from "lucide-react";
+import { Send, SkipForward, Volume2, ChevronRight, Timer, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Prompt = {
@@ -17,11 +17,21 @@ type Prompt = {
   followUps: string[] | null;
 };
 
-export function SpeakingSessionRunner({ prompts, aiReady }: { prompts: Prompt[]; aiReady: boolean }) {
+export function SpeakingSessionRunner({
+  prompts,
+  aiReady,
+  voiceReady = false,
+}: {
+  prompts: Prompt[];
+  aiReady: boolean;
+  voiceReady?: boolean;
+}) {
   const part = prompts[0].part;
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
+  const [speaking, setSpeaking] = useState(false);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // P2 独白：准备 60s → 讲话 120s
   const [p2Phase, setP2Phase] = useState<"prepare" | "speak" | "done">("prepare");
@@ -47,7 +57,7 @@ export function SpeakingSessionRunner({ prompts, aiReady }: { prompts: Prompt[];
     return () => clearInterval(t);
   }, [part, p2Phase]);
 
-  function speakQuestion(text: string) {
+  function browserTTS(text: string) {
     if (!("speechSynthesis" in window)) return;
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "en-US";
@@ -55,6 +65,47 @@ export function SpeakingSessionRunner({ prompts, aiReady }: { prompts: Prompt[];
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(u);
   }
+
+  // 优先真人级 TTS(/api/tts)，未配置或失败时降级浏览器合成音
+  async function speakQuestion(text: string) {
+    // 停掉上一段
+    ttsAudioRef.current?.pause();
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+
+    if (!voiceReady) {
+      browserTTS(text);
+      return;
+    }
+    setSpeaking(true);
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(20_000), // 超时即降级浏览器合成音，不干等
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      ttsAudioRef.current = audio;
+      audio.addEventListener("ended", () => URL.revokeObjectURL(url), { once: true });
+      audio.addEventListener("play", () => setSpeaking(false), { once: true });
+      await audio.play();
+    } catch {
+      setSpeaking(false);
+      browserTTS(text); // 兜底
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      ttsAudioRef.current?.pause();
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   function submit(skipped: boolean = false) {
     start(async () => {
@@ -135,8 +186,14 @@ export function SpeakingSessionRunner({ prompts, aiReady }: { prompts: Prompt[];
                 {current.question}
               </CardTitle>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => speakQuestion(current.question)}>
-              <Volume2 className="h-4 w-4" />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => speakQuestion(current.question)}
+              disabled={speaking}
+              title="朗读题目"
+            >
+              {speaking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
             </Button>
           </div>
         </CardHeader>
