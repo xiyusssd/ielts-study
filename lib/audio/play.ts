@@ -1,6 +1,8 @@
 // 发音播放（客户端）。优先播本地预生成音频(/audio/words|sentences/<slug>.m4a)，
 // 没有则降级浏览器 speechSynthesis。slug 规则必须与 scripts/gen-word-audio.py 一致。
 
+import { speakText } from "@/lib/audio/tts";
+
 export function audioSlug(s: string): string {
   return s
     .trim()
@@ -11,11 +13,7 @@ export function audioSlug(s: string): string {
 
 function fallbackTTS(text: string, rate = 0.9) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "en-US";
-  u.rate = rate;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(u);
+  speakText(text, { rate });
 }
 
 /**

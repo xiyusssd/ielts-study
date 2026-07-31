@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Countdown } from "@/components/assessment/countdown";
+import { speakText } from "@/lib/audio/tts";
 import { Play, Pause, Volume2 } from "lucide-react";
 
 export function ListeningTest({
@@ -58,13 +59,11 @@ export function ListeningTest({
         setPlaying(false);
         return;
       }
-      const utter = new SpeechSynthesisUtterance(script);
-      utter.lang = "en-US";
-      utter.rate = 0.95;
-      utter.onend = () => setPlaying(false);
-      utter.onerror = () => setPlaying(false);
-      window.speechSynthesis.speak(utter);
+      speakText(script, { rate: 0.95 });
       setPlaying(true);
+      // speechSynthesis 不支持 onend 精确回调，用估计时长
+      const estimatedDuration = script.split(/\s+/).length * 400; // ~400ms per word
+      setTimeout(() => setPlaying(false), Math.max(estimatedDuration, 5000));
     } else {
       toast.error("浏览器不支持语音合成，请查看文本");
       setShowScript(true);

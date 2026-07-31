@@ -31,7 +31,6 @@ export async function POST(req: Request) {
     }
     const token = await provider.realtimeToken({
       instructions: systemInstructions,
-      voice: "alloy",
     });
     return NextResponse.json(token);
   } catch (err) {

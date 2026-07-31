@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Play, Pause, Volume2, Rewind, FastForward, Gauge } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { speakText } from "@/lib/audio/tts";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5];
 
@@ -64,13 +65,11 @@ export function AudioPlayer({
         window.speechSynthesis?.cancel();
         setPlaying(false);
       } else {
-        const u = new SpeechSynthesisUtterance(fallbackScript);
-        u.lang = "en-US";
-        u.rate = speed;
-        u.onend = () => setPlaying(false);
-        u.onerror = () => setPlaying(false);
-        window.speechSynthesis?.speak(u);
+        speakText(fallbackScript, { rate: speed });
         setPlaying(true);
+        // 用词数估算播放时长后自动复位
+        const estimatedMs = fallbackScript.split(/\s+/).length * 400;
+        setTimeout(() => setPlaying(false), Math.max(estimatedMs, 3000));
       }
     }
   }

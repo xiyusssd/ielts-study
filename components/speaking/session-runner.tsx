@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Textarea } from "@/components/ui/textarea";
 import { Send, SkipForward, Volume2, ChevronRight, Timer, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { speakText } from "@/lib/audio/tts";
 
 type Prompt = {
   id: string;
@@ -58,12 +59,7 @@ export function SpeakingSessionRunner({
   }, [part, p2Phase]);
 
   function browserTTS(text: string) {
-    if (!("speechSynthesis" in window)) return;
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "en-US";
-    u.rate = 0.95;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(u);
+    speakText(text, { rate: 0.95 });
   }
 
   // 优先真人级 TTS(/api/tts)，未配置或失败时降级浏览器合成音

@@ -25,6 +25,7 @@ const schema = z.object({
   OPENAI_TEXT_BASE_URL: z.string().optional(),
   OPENAI_TEXT_MODEL: z.string().default("gpt-4o"),
   OPENAI_TTS_MODEL: z.string().default("tts-1"),
+  OPENAI_TTS_VOICE: z.string().default("shimmer"),
   OPENAI_STT_MODEL: z.string().default("whisper-1"),
   OPENAI_REALTIME_MODEL: z.string().default("gpt-4o-realtime-preview"),
 

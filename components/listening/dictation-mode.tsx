@@ -10,6 +10,7 @@ import { SessionSummary } from "@/components/session-summary";
 import { normSentence, wordDiff } from "@/lib/text/word-diff";
 import { Play, ArrowLeft, ArrowRight, RotateCw, Lightbulb, CornerDownLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { speakText } from "@/lib/audio/tts";
 
 /**
  * 精听模式：把 transcript 按句号 / 换行拆成句子，
@@ -94,12 +95,7 @@ export function DictationMode({
   }
 
   function play() {
-    if (!("speechSynthesis" in window)) return;
-    const u = new SpeechSynthesisUtterance(current);
-    u.lang = "en-US";
-    u.rate = 0.85;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(u);
+    speakText(current, { rate: 0.85 });
   }
 
   function check() {

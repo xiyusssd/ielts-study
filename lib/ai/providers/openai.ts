@@ -98,7 +98,7 @@ export const openaiProvider: AIProvider = {
     const c = getClient();
     const res = await c.audio.speech.create({
       model: env.OPENAI_TTS_MODEL,
-      voice: (opts.voice as "alloy") ?? "alloy",
+      voice: opts.voice ?? env.OPENAI_TTS_VOICE,
       input: text,
       response_format: opts.format ?? "mp3",
     });
@@ -132,7 +132,7 @@ export const openaiProvider: AIProvider = {
       },
       body: JSON.stringify({
         model: env.OPENAI_REALTIME_MODEL,
-        voice: opts.voice ?? "alloy",
+        voice: opts.voice ?? env.OPENAI_TTS_VOICE,
         instructions: opts.instructions,
       }),
       signal: AbortSignal.timeout(VOICE_TIMEOUT_MS),
