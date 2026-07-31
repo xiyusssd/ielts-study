@@ -24,6 +24,10 @@ extraResources:
     to: app/prisma/schema.prisma
   - from: content
     to: app/content
+    filter:
+      - "**/*"
+      - "!cambridge-pdfs/**"
+      - "!audio/*.mp3"
   - from: build/template.db
     to: template.db
   - from: /Users/xiyu/.local/node22/bin/node
