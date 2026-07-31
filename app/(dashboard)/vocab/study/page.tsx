@@ -52,6 +52,8 @@ export default async function VocabStudyPage({
     reviewLimit: isExplicitFilter ? 0 : reviewLimit,
     source,
     topic,
+    // 句子拼写：新词只取带例句的（全库仅少量词有例句，否则过滤后为空）
+    requireExamples: sentenceMode,
   });
 
   let items = [

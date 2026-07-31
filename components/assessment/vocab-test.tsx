@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Countdown } from "@/components/assessment/countdown";
 import { Check, X } from "lucide-react";
+import { WordTTS } from "@/components/vocab/word-tts";
 
 const POS_LABELS: Record<string, string> = {
   noun: "名词", verb: "动词", adj: "形容词", adv: "副词",
@@ -73,7 +74,10 @@ export function VocabTest({ questions }: { questions: GenVocabQ[] }) {
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <CardTitle className="text-3xl">{q.word}</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-3xl">{q.word}</CardTitle>
+                <WordTTS text={q.word} />
+              </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {q.ipa && <span className="font-mono text-sm text-muted-foreground">{q.ipa}</span>}
                 {q.pos && <Badge variant="secondary">{POS_LABELS[q.pos] ?? q.pos}</Badge>}
@@ -89,7 +93,8 @@ export function VocabTest({ questions }: { questions: GenVocabQ[] }) {
           {q.options.map((opt, i) => {
             const picked = answers[q.id] === i;
             const isAnswer = q.answer === i;
-            // 作答后：正确项一律标绿；错选项标红；未选未答项保持中性
+            const pickedWord = pickedOpt?.fromWord ?? null;
+            // 作答后：正确项一律标绿；错选项只在自己的选项上直接展示对应单词意思
             let cls = "border-input";
             let icon = null;
             if (answered) {
@@ -119,41 +124,17 @@ export function VocabTest({ questions }: { questions: GenVocabQ[] }) {
                 <span className="mr-1 font-mono text-muted-foreground">
                   {String.fromCharCode(65 + i)}.
                 </span>
-                <span className="flex-1">{opt.text}</span>
+                <span className="flex-1">
+                  {opt.text}
+                  {answered && picked && !isCorrect && pickedWord && pickedWord !== NONE_OF_ABOVE && (
+                    <span className="mt-1 block text-xs opacity-90">这是「{pickedWord}」的意思</span>
+                  )}
+                </span>
                 {icon}
               </button>
             );
           })}
 
-          {answered && (
-            <div
-              className={
-                "mt-3 space-y-1 rounded-lg p-3 text-sm font-medium " +
-                (isCorrect ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive")
-              }
-            >
-              {isCorrect ? (
-                <span className="flex items-center gap-2">
-                  <Check className="h-4 w-4" /> 回答正确
-                </span>
-              ) : (
-                <>
-                  <span className="flex items-center gap-2">
-                    <X className="h-4 w-4" />
-                    {correctOpt.text === NONE_OF_ABOVE
-                      ? "回答错误 · 正确答案是「以上都不正确」"
-                      : `回答错误 · 正确答案是 ${correctOpt.text}`}
-                  </span>
-                  {/* 干扰项归属：你选的那个释义其实属于哪个单词 */}
-                  {pickedOpt && pickedOpt.fromWord && pickedOpt.text !== NONE_OF_ABOVE && (
-                    <span className="block pl-6 text-xs opacity-90">
-                      你选的「{pickedOpt.text}」是 {pickedOpt.fromWord} 的意思
-                    </span>
-                  )}
-                </>
-              )}
-            </div>
-          )}
         </CardContent>
       </Card>
 

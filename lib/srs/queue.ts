@@ -19,6 +19,7 @@ export async function generateDailyQueue(
     targetLevel?: number;
     source?: string; // 词汇书来源筛选(如 ielts/cet6/awl)，新词只取该来源
     topic?: string; // 雅思话题筛选(如 environment)，新词只取该话题
+    requireExamples?: boolean; // 句子拼写用：新词只取带例句的（全库仅少量词有例句）
   } = {},
 ) {
   const newLimit = opts.newLimit ?? 20;
@@ -58,6 +59,8 @@ export async function generateDailyQueue(
           id: { notIn: Array.from(learnedIds) },
           level: { lte: Math.max(targetLevel, 3000) },
           ...(tagFilters.length ? { AND: tagFilters } : {}),
+          // 句子拼写：只取带例句的词（否则按 level 抽的新词过滤后基本为空）
+          ...(opts.requireExamples ? { examples: { notIn: ["", "[]"] } } : {}),
         },
         orderBy: [{ level: "asc" }, { spelling: "asc" }],
         take: remaining,
