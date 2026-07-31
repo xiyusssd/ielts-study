@@ -27,6 +27,7 @@ dist/
 # Electron 打包产物 + 含版权内容的 template.db + 生成的图标
 dist-electron/
 build/template.db
+build/template.db.*
 build/icon.icns
 
 # 备份
@@ -74,3 +75,6 @@ public/audio/sentences/
 # Python 缓存
 scripts/__pycache__/
 __pycache__/
+
+# AI agent 本地状态（机器相关的会话记忆与权限设置，不属于项目产物）
+.claude/
