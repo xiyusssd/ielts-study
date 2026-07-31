@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/session";
 import { ai } from "@/lib/ai";
+import { friendlyAIError } from "@/lib/ai/errors";
 import { providerReady } from "@/lib/env";
 
 /**
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
     });
     return NextResponse.json(token);
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    return NextResponse.json({ error: friendlyAIError(err) }, { status: 500 });
   }
 }
 

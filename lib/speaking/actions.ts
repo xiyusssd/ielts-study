@@ -35,15 +35,20 @@ export async function submitSpeakingSession(input: {
   if (!input.skipped && candidateText.trim() && providerReady("text") && env.OPENAI_API_KEY) {
     try {
       const { gradeSpeaking } = await import("@/lib/ai/speaking-grader");
-      const result = await gradeSpeaking({ transcript: candidateText });
-      scores = result.scores;
-      feedbackText = result.feedback;
-      strengths = result.strengths;
-      improvements = result.improvements;
-      providerName = env.AI_TEXT_PROVIDER;
-      modelName = env.OPENAI_TEXT_MODEL;
-    } catch (e) {
-      feedbackText = `AI 评分失败：${(e as Error).message.slice(0, 300)}`;
+      const { friendlyAIError } = await import("@/lib/ai/errors");
+      try {
+        const result = await gradeSpeaking({ transcript: candidateText });
+        scores = result.scores;
+        feedbackText = result.feedback;
+        strengths = result.strengths;
+        improvements = result.improvements;
+        providerName = env.AI_TEXT_PROVIDER;
+        modelName = env.OPENAI_TEXT_MODEL;
+      } catch (e) {
+        feedbackText = `${friendlyAIError(e)}。已保存你的回答，可稍后重新评分。`;
+      }
+    } catch {
+      feedbackText = "AI 评分暂时不可用，已保存你的回答。";
     }
   }
 

@@ -1,14 +1,23 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getEnv } from "@/lib/env";
+import { requestJSON, JSON_OUTPUT_RULES } from "@/lib/ai/json";
 import type { AIProvider, ChatMessage, ChatOptions, ChatResult } from "@/lib/ai/provider";
 
 let client: Anthropic | null = null;
+
+// SDK 默认超时过长，慢网会挂死 server action。收紧到 60s + 自动重试。
+const TEXT_TIMEOUT_MS = 60_000;
+const MAX_RETRIES = 2;
 
 function getClient(): Anthropic {
   if (client) return client;
   const env = getEnv();
   if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY 未配置");
-  client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+  client = new Anthropic({
+    apiKey: env.ANTHROPIC_API_KEY,
+    timeout: TEXT_TIMEOUT_MS,
+    maxRetries: MAX_RETRIES,
+  });
   return client;
 }
 
@@ -47,14 +56,9 @@ export const anthropicProvider: AIProvider = {
   },
 
   async chatJSON<T>(messages: ChatMessage[], schema: unknown, opts: ChatOptions = {}): Promise<T> {
-    // Anthropic 没有严格 json_schema，用系统指令 + 后处理提取
-    const jsonSystem =
-      "你必须只输出符合以下 JSON Schema 的合法 JSON，不要输出任何其它文字或代码块围栏。\n" +
-      "Schema:\n" +
-      JSON.stringify(schema);
+    // Anthropic 没有严格 json_schema，用系统指令约束 + 失败自动重试
+    const jsonSystem = JSON_OUTPUT_RULES + "\nSchema:\n" + JSON.stringify(schema);
     const patched = [{ role: "system" as const, content: jsonSystem }, ...messages];
-    const res = await this.chat!(patched, opts);
-    const cleaned = res.text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
-    return JSON.parse(cleaned) as T;
+    return requestJSON<T>(async () => (await this.chat!(patched, opts)).text);
   },
 };

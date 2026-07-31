@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/session";
 import { providerReady } from "@/lib/env";
 import { generateExampleSentence, type SentenceLevel } from "@/lib/ai/content-gen";
+import { friendlyAIError } from "@/lib/ai/errors";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 /** 为一个单词现场生成新例句(句子拼写"换 AI 句")。文本走 airouter。 */
@@ -34,6 +35,6 @@ export async function POST(req: Request) {
     const sentence = await generateExampleSentence(word, level);
     return NextResponse.json(sentence);
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    return NextResponse.json({ error: friendlyAIError(err) }, { status: 500 });
   }
 }

@@ -179,12 +179,17 @@ export async function submitWriting(payload: { content: string; wordCount: numbe
   if (providerReady("text") && env.OPENAI_API_KEY) {
     try {
       const { gradeWriting } = await import("@/lib/ai/writing-grader");
-      const graded = await gradeWriting({ prompt: "assessment writing task", content: payload.content });
-      scores = graded.scores;
-      feedback = graded.feedback;
-      usedAI = true;
-    } catch (e) {
-      feedback = `AI 批改失败：${(e as Error).message.slice(0, 200)}`;
+      const { friendlyAIError } = await import("@/lib/ai/errors");
+      try {
+        const graded = await gradeWriting({ prompt: "assessment writing task", content: payload.content });
+        scores = graded.scores;
+        feedback = graded.feedback;
+        usedAI = true;
+      } catch (e) {
+        feedback = `${friendlyAIError(e)}。此分数为占位，可稍后重测写作。`;
+      }
+    } catch {
+      feedback = "AI 批改暂时不可用，此分数为占位。";
     }
   }
 
@@ -213,12 +218,17 @@ export async function submitSpeaking(payload: { transcript: string; skipped?: bo
   if (!payload.skipped && providerReady("text") && payload.transcript.trim()) {
     try {
       const { gradeSpeaking } = await import("@/lib/ai/speaking-grader");
-      const graded = await gradeSpeaking({ transcript: payload.transcript });
-      scores = graded.scores;
-      feedback = graded.feedback;
-      usedAI = true;
-    } catch (e) {
-      feedback = `AI 评分失败：${(e as Error).message.slice(0, 200)}`;
+      const { friendlyAIError } = await import("@/lib/ai/errors");
+      try {
+        const graded = await gradeSpeaking({ transcript: payload.transcript });
+        scores = graded.scores;
+        feedback = graded.feedback;
+        usedAI = true;
+      } catch (e) {
+        feedback = `${friendlyAIError(e)}。此分数为占位，可稍后重测口语。`;
+      }
+    } catch {
+      feedback = "AI 评分暂时不可用，此分数为占位。";
     }
   }
 

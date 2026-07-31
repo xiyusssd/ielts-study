@@ -41,12 +41,17 @@ export async function submitEssay(input: {
   if (aiReady) {
     try {
       const { gradeWriting } = await import("@/lib/ai/writing-grader");
-      const result = await gradeWriting({ prompt: promptRec.prompt, content: input.content });
-      graded = result;
-      providerName = env.AI_TEXT_PROVIDER;
-      modelName = env.OPENAI_TEXT_MODEL;
-    } catch (e) {
-      graded.feedback = `AI 批改失败：${(e as Error).message.slice(0, 300)}。以下为占位分数。`;
+      const { friendlyAIError } = await import("@/lib/ai/errors");
+      try {
+        const result = await gradeWriting({ prompt: promptRec.prompt, content: input.content });
+        graded = result;
+        providerName = env.AI_TEXT_PROVIDER;
+        modelName = env.OPENAI_TEXT_MODEL;
+      } catch (e) {
+        graded.feedback = `${friendlyAIError(e)}。以下为占位分数，可稍后重新提交。`;
+      }
+    } catch {
+      graded.feedback = "AI 批改暂时不可用，以下为占位分数。";
     }
   }
 
