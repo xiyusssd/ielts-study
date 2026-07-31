@@ -1,6 +1,6 @@
 // 验证词汇测试结果页有"逐词回顾"，且列出单词+释义。
 import { chromium } from 'playwright';
-const BASE = process.env.BASE || 'http://localhost:3000';
+const BASE = process.env.BASE || 'http://127.0.0.1:3000';
 const EMAIL = process.env.EMAIL || 'test@example.com';
 const PASS = process.env.PASS || 'test1234';
 

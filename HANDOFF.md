@@ -1,3 +1,51 @@
+# ⭐⭐⭐ 最新状态(2026-07-31) · 修「端口冒充」致内容缺失 · 已重打包并装到 /Applications · 未 commit
+
+**用户报「app 内容有问题/数据缺失」,根因不在业务代码,是启动器的端口与身份校验缺陷。**
+
+**失效链**(两个缺陷叠加):
+
+1. `electron/main.js` 的 `findPort` 从 **3000** 起探,而本机 OrbStack 的 Docker 容器 `ielts-app-1` 常驻 `*:3000`(独立空库,**仅 75 词**)。
+2. Node 默认开 `SO_REUSEADDR`,BSD 语义下**允许在别人已占通配 `*:3000` 之上再绑更具体的 `127.0.0.1:3000`** → 旧探测误判「空闲」。
+3. 致命的一环:`waitHealth` **只验 `{ok:true}`,不验应答者是谁**。自己的 server 启动慢/崩溃/抢不到端口时,同端口的 Docker 实例会把 health 应答顶上去,窗口于是加载了**别人的 75 词库**。
+
+`localhost` 在本机优先解析 `::1`,Docker 同时监听 `[::]:3000`,而 app 只绑 v4 → 用 `localhost:3000` 访问必然打到 Docker。**14 个 smoke 脚本的 `BASE` 全默认 `localhost:3000`,所以此前冒烟一直在测 Docker,掩盖了问题。**
+
+**本轮修复**(4 处,未 commit):
+
+- `electron/main.js`:
+  - 端口区间 `3000-3020` → **`43110-43140`**,离开公共争用区。
+  - `findPort` 改为 `probeFree` 三项全过才算可独占:能绑 `0.0.0.0` + v4 回环无人应答 + v6 回环无人应答(单靠 bind 探测不可信)。
+  - 新增每次启动随机 `INSTANCE_ID`,`waitHealth` 只在 `instanceId` 匹配时才放行;不匹配时报明确错误(端口被其他服务占用),不再静默加载别人的库。
+- `electron/db-init.js`:`buildEnv` 注入 `APP_INSTANCE_ID`,**排在用户 `.env` 覆盖之后**,不接受篡改。
+- `app/api/health/route.ts`:回显 `instanceId`(非打包运行时为 `undefined`)。
+- `scripts/*.mjs`(14 个):`BASE` 默认 `localhost:3000` → **`127.0.0.1:3000`**,消除 IPv6 歧义;两个硬编码的也改为可用 `BASE=` 覆盖。
+
+**验证**:
+
+- 端口探测单测:对 3000 现在判「被占」(旧逻辑判「空闲」),对 43110 判「空闲」。
+- tsc 0 错误;`electron/main.js` 无 lint。
+- 脱离仓库(`/tmp`)跑打包产物:health 回显注入的 `instanceId`、`words:5031`;`/login`、`/reading/cambridge~c11-t1-p1`、`/listening/cambridge~c13-t1-s4`、音频、CSS、JS chunk 全 200。asar 内确认含新逻辑(`INSTANCE_ID`/`probeFree`/`43110`)。
+- 实机:`/Applications` 版本启动落在 **43110**,`instanceId` 匹配,launcher.log 干净。8 条路由(`/`、`/login`、reading、listening、`/vocab`、`/writing`、`/speaking/part1`、`/assessment`)全 200。
+- **LIVE 库零损失**:112 Passage / 1318 Question / 5031 Word / 168 Attempt / 50 VocabProgress / 3 User / 7 Assessment,与启动前备份逐项一致,悬空外键 0。备份留在 `data.db.bak-20260731-204807`。
+
+**安装与清理**:新包已装到 `/Applications/雅思学习助手.app`(675M,已去 quarantine);按用户授权删除了 `dist/`(含旧 `雅思学习助手-1.0.0.dmg` 与旧 .app);现存唯一产物 `dist-electron/雅思学习助手-0.1.0-arm64.dmg`(339M)。
+
+**续:Docker 容器移出 3000**(`docker-compose.yml`,未 commit):
+
+该容器**不是孤儿**,出自本仓库被追踪的 `docker-compose.yml`(v1.0 起就在),是项目正规的 Docker 部署路径,因此没有删除,只挪端口。app 迁到 43110 后,3000 的争用方变成「容器 vs `dev.sh` 的 next dev + 14 个 smoke 脚本」,而 3000 是项目声明的 dev 端口,所以让容器让位:
+
+- 宿主端口 `3000:3000` → **`${APP_HOST_PORT:-3100}:3000`**(容器内仍是 3000,healthcheck 不用改)。
+- `NEXT_PUBLIC_APP_URL` 改读**独立变量 `APP_PUBLIC_URL`**:原先复用同名变量,会被 `.env` 里给本机 dev 用的 `http://localhost:3000` 盖掉,导致容器自认在 3000 而实际映射在 3100。
+- 新增顶层 **`name: ielts`**:目录名 `雅思` 是非 ASCII,compose 从目录推导的项目名为空串,**任何 `docker compose` 命令在此目录都直接报 `project name must not be empty`**(所以当初只能靠 `-p ielts` 手动指定)。取值与既有容器的 `com.docker.compose.project` 标签一致,确保接管的是同一套容器和 `ielts_app-data` 卷。
+
+**验证**:`docker compose config` 通过,解析出 `published:3100` / `NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100`;`docker compose up -d --no-build` 重建后 healthy;**`prod.db` md5 前后一致(`a39775bf7790716a0c2da56496b9c5f8`,278528 字节),卷数据未动**;3000 现已完全腾空(v4/v6/通配三向 bind 全部成功),容器在 3100 的 v4/v6 都正常应答(7 users / 75 words);app 不受影响(43110,uptime 未中断,5031 words)。
+
+访问方式变化:容器实例从 `localhost:3000` 改为 **`127.0.0.1:3100`**。要改回或另选端口,设 `APP_HOST_PORT` 即可(单一旋钮,URL 会跟着变)。
+
+**⚠️ 教训**:后台跑打包不要用 `nohup ... &` 配合极短的前台等待——后台 shell 被回收会带走子进程(本轮第一次打包就这样断在 build 阶段)。直接前台跑并给足超时。
+
+---
+
 # ⭐⭐⭐ 最新状态(2026-07-28 续3) · Electron 独立窗口打包完成 · 已 commit(未 push)
 
 **本轮完成并已提交(未 push)**:

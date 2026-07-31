@@ -1,6 +1,6 @@
 // 验证句子拼写四项加强：LCS 判分 / 提示台阶 / 错题重练+统计 / 难度切换
 import { chromium } from 'playwright';
-const BASE = process.env.BASE || 'http://localhost:3000';
+const BASE = process.env.BASE || 'http://127.0.0.1:3000';
 const EMAIL = process.env.EMAIL || 'test@example.com';
 const PASS = process.env.PASS || 'test1234';
 

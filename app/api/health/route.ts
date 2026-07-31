@@ -11,6 +11,9 @@ export async function GET() {
   const checks: Record<string, unknown> = {
     time: new Date().toISOString(),
     uptimeSec: Math.floor((Date.now() - bootTime) / 1000),
+    // 由 Electron 启动器注入并在此回显，供其确认应答者是自己 spawn 的进程，
+    // 而非碰巧监听同一端口的其他服务。非打包运行时为 undefined。
+    instanceId: process.env.APP_INSTANCE_ID || undefined,
   };
 
   try {

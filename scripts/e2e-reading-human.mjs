@@ -4,7 +4,7 @@ import { chromium } from "playwright";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
-const BASE = process.env.BASE || "http://localhost:3000";
+const BASE = process.env.BASE || "http://127.0.0.1:3000";
 const EMAIL = process.env.EMAIL || "test@example.com";
 const PASS = process.env.PASS || "test1234";
 

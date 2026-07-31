@@ -20,27 +20,86 @@ const FP_SQL =
   "(SELECT count(*) FROM Question)||'_'||(SELECT count(*) FROM WritingPrompt)||'_'||" +
   "(SELECT count(*) FROM SpeakingPrompt);";
 
-// 内容同步：清理内容表 + 强依赖内容 id 的进度记录，从 template 重灌。
-// 保留 User/Profile/Assessment/Plan/WeekPlan/DailyTask（账号/评估/计划）。
-const SYNC_SQL = (tplDb) => `PRAGMA foreign_keys=OFF;
-ATTACH '${tplDb}' AS tpl;
-BEGIN;
-DELETE FROM VocabProgress;
-DELETE FROM Attempt;
-DELETE FROM WritingSubmission;
-DELETE FROM SpeakingSession;
-DELETE FROM Question;
-DELETE FROM Passage;
-DELETE FROM Word;
-DELETE FROM WritingPrompt;
-DELETE FROM SpeakingPrompt;
-INSERT INTO Word SELECT * FROM tpl.Word;
-INSERT INTO Passage SELECT * FROM tpl.Passage;
-INSERT INTO Question SELECT * FROM tpl.Question;
-INSERT INTO WritingPrompt SELECT * FROM tpl.WritingPrompt;
-INSERT INTO SpeakingPrompt SELECT * FROM tpl.SpeakingPrompt;
-COMMIT;
-DETACH tpl;`;
+// 用户数据表：同步流程绝不允许改动这些表的行数。
+// 历史上旧同步逻辑会 DELETE VocabProgress/Attempt/… 来「配合」内容表重灌，
+// 结果是内容一变用户进度就清零。现在改为硬约束 + 同步后校验。
+const USER_TABLES = [
+  "User",
+  "Profile",
+  "Assessment",
+  "VocabProgress",
+  "Attempt",
+  "WritingSubmission",
+  "SpeakingSession",
+  "Plan",
+  "WeekPlan",
+  "DailyTask",
+];
+
+// 内容表同步规格：自然键 = 内容本身的标识，不依赖随机 id。
+// 顺序即依赖顺序（Passage 必须先于 Question 建好映射）。
+const CONTENT_SPEC = [
+  { table: "Word", key: ["spelling"], fks: {} },
+  { table: "Passage", key: ["source", "module"], fks: {} },
+  { table: "Question", key: ["passageId", "index"], fks: { passageId: "Passage" } },
+  { table: "WritingPrompt", key: ["task", "prompt"], fks: {} },
+  { table: "SpeakingPrompt", key: ["part", "question"], fks: {} },
+];
+
+const q = (name) => `"${name}"`;
+
+/**
+ * 生成内容同步 SQL：按自然键 upsert。
+ *
+ * 三条不变式：
+ *   1. 本地 id 永不改变 —— 已存在的行只更新内容列，进度表外键因此始终有效
+ *   2. 只增不删 —— 模板里没有的旧内容留在库里（可能有人的历史记录指着它）
+ *   3. 不碰 USER_TABLES —— 整个语句里不出现这些表名
+ */
+function syncSql(tplDb, colsOf) {
+  const out = [`ATTACH '${tplDb}' AS tpl;`, "BEGIN;"];
+
+  for (const { table, key, fks } of CONTENT_SPEC) {
+    const cols = colsOf(table);
+    const body = cols.filter((c) => c !== "id");
+
+    // 模板行的外键先翻译成本地 id，否则跨库比对必然错位
+    const tplVal = (c) =>
+      fks[c] ? `(SELECT m.id FROM map_${fks[c]} m WHERE m.tpl_id = t.${q(c)})` : `t.${q(c)}`;
+    const joinOn = key.map((k) => `n.${q(k)} IS ${tplVal(k)}`).join(" AND ");
+
+    // tpl_id → 本地 id 映射，供后续表的外键翻译使用
+    out.push(`CREATE TEMP TABLE map_${table} AS
+  SELECT t.id AS tpl_id, n.id AS id FROM tpl.${q(table)} t
+  JOIN main.${q(table)} n ON ${joinOn};`);
+
+    out.push(`UPDATE main.${q(table)} SET ${body.map((c) => `${q(c)} = ${tplVal(c)}`).join(", ")}
+  FROM tpl.${q(table)} t
+  WHERE main.${q(table)}.id = (SELECT m.id FROM map_${table} m WHERE m.tpl_id = t.id);`);
+
+    out.push(`INSERT INTO main.${q(table)} (id, ${body.map(q).join(", ")})
+  SELECT t.id, ${body.map(tplVal).join(", ")} FROM tpl.${q(table)} t
+  WHERE NOT EXISTS (SELECT 1 FROM map_${table} m WHERE m.tpl_id = t.id);`);
+  }
+
+  out.push("COMMIT;", "DETACH tpl;");
+  return out.join("\n");
+}
+
+/** 同步后自检：用户表行数不变 + 进度表外键无悬空。返回问题列表。 */
+function verifySql() {
+  return [
+    "SELECT 'dangling.VocabProgress', COUNT(*) FROM VocabProgress v LEFT JOIN Word w ON w.id=v.wordId WHERE w.id IS NULL;",
+    "SELECT 'dangling.Attempt.passage', COUNT(*) FROM Attempt a LEFT JOIN Passage p ON p.id=a.passageId WHERE a.passageId IS NOT NULL AND p.id IS NULL;",
+    "SELECT 'dangling.Attempt.question', COUNT(*) FROM Attempt a LEFT JOIN Question x ON x.id=a.questionId WHERE a.questionId IS NOT NULL AND x.id IS NULL;",
+    "SELECT 'dangling.WritingSubmission', COUNT(*) FROM WritingSubmission s LEFT JOIN WritingPrompt p ON p.id=s.promptId WHERE s.promptId IS NOT NULL AND p.id IS NULL;",
+  ].join("\n");
+}
+
+/** 用户表行数快照，用于同步前后比对。 */
+function countsSql() {
+  return USER_TABLES.map((t) => `SELECT '${t}', COUNT(*) FROM ${q(t)};`).join("\n");
+}
 
 // 幂等补列：新版加的可空列在这里补，老 data.db 缺列会崩
 function addCol(dbPath, table, col, def, log) {
@@ -54,6 +113,71 @@ function addCol(dbPath, table, col, def, log) {
       /* 忽略 */
     }
   }
+}
+
+/** 解析 "key|value" 行为 Map。 */
+function parseRows(text) {
+  const map = new Map();
+  for (const line of text.split("\n").filter(Boolean)) {
+    const i = line.indexOf("|");
+    map.set(line.slice(0, i), Number(line.slice(i + 1)));
+  }
+  return map;
+}
+
+/**
+ * 内容同步：先在影子副本上做，自检通过才换回真库。
+ * 真库在验证通过前完全不被写入 —— 同步出问题最多浪费一次拷贝。
+ */
+function syncContent({ dataDb, templateDb, log }) {
+  const shadow = dataDb + ".sync-tmp";
+  const colsOf = (table) =>
+    sqlite(dataDb, `SELECT name FROM pragma_table_info('${table}');`).split("\n").filter(Boolean);
+
+  try {
+    const before = parseRows(sqlite(dataDb, countsSql()));
+    fs.rmSync(shadow, { force: true });
+    fs.copyFileSync(dataDb, shadow);
+    sqlite(shadow, syncSql(templateDb, colsOf));
+
+    // 闸门 1：用户数据一行都不能少
+    const after = parseRows(sqlite(shadow, countsSql()));
+    for (const [table, n] of before) {
+      if (after.get(table) !== n) {
+        throw new Error(`用户表 ${table} 行数变化 ${n} → ${after.get(table)}`);
+      }
+    }
+    // 闸门 2：进度记录的内容外键不能悬空
+    for (const [what, n] of parseRows(sqlite(shadow, verifySql()))) {
+      if (n > 0) throw new Error(`${what} 出现 ${n} 条悬空外键`);
+    }
+
+    const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+    fs.copyFileSync(dataDb, `${dataDb}.bak-${stamp}`);
+    fs.renameSync(shadow, dataDb);
+    pruneBackups(dataDb, log);
+    log(`内容同步完成（备份 data.db.bak-${stamp}）`);
+    return true;
+  } catch (e) {
+    fs.rmSync(shadow, { force: true });
+    log("内容同步失败，已放弃同步，真实数据未被改动: " + e.message);
+    return false;
+  }
+}
+
+/** 只保留最近 KEEP_BACKUPS 份自动备份，避免长期运行把磁盘填满。 */
+const KEEP_BACKUPS = 5;
+function pruneBackups(dataDb, log) {
+  const dir = path.dirname(dataDb);
+  const stale = fs
+    .readdirSync(dir)
+    .filter((f) => f.startsWith("data.db.bak-"))
+    .sort()
+    .slice(0, -KEEP_BACKUPS);
+  for (const f of stale) {
+    fs.rmSync(path.join(dir, f), { force: true });
+  }
+  if (stale.length) log(`清理旧备份 ${stale.length} 份`);
 }
 
 // 首启拷贝模板 + 非首启内容同步 + schema 补列
@@ -76,16 +200,16 @@ function initDatabase({ dataDir, templateDb, log = console.log }) {
   } catch (e) {
     log("指纹比对失败，跳过内容同步: " + e.message);
   }
-  if (tplFp && tplFp !== dataFp) {
+  // 同步判据是「模板指纹变了没」，不是「两库指纹相等吗」。
+  // 因为同步只增不删，本库指纹可能永远追不上模板（模板下架内容时），
+  // 用相等做判据会导致每次启动都重跑同步、每次都堆一个备份。
+  const marker = path.join(dataDir, ".content-synced");
+  const synced = fs.existsSync(marker) ? fs.readFileSync(marker, "utf8").trim() : "";
+  if (tplFp && tplFp !== synced && tplFp !== dataFp) {
     log(`内容有更新（${dataFp} → ${tplFp}），同步题库/词库...`);
-    fs.copyFileSync(dataDb, dataDb + ".bak");
-    try {
-      sqlite(dataDb, SYNC_SQL(templateDb));
-      log("内容同步完成（备份 data.db.bak）");
-    } catch (e) {
-      log("内容同步失败，回滚: " + e.message);
-      fs.copyFileSync(dataDb + ".bak", dataDb);
-    }
+    if (syncContent({ dataDb, templateDb, log })) fs.writeFileSync(marker, tplFp);
+  } else if (tplFp && !synced) {
+    fs.writeFileSync(marker, tplFp);
   }
 
   // schema 升级：补齐用户表新增可空列
@@ -114,7 +238,7 @@ function parseEnvFile(file) {
 }
 
 // 组织 server 子进程的环境变量（对应 launcher 232-258 行）
-function buildEnv({ dataDir, port, log = console.log }) {
+function buildEnv({ dataDir, port, instanceId, log = console.log }) {
   const dataDb = path.join(dataDir, "data.db");
   const secretFile = path.join(dataDir, "session-secret");
   if (!fs.existsSync(secretFile)) {
@@ -135,7 +259,7 @@ function buildEnv({ dataDir, port, log = console.log }) {
     AI_REALTIME_PROVIDER: "openai",
     OPENAI_BASE_URL: "https://api.openai.com/v1",
     OPENAI_TEXT_BASE_URL: "https://airouter.linkof.link/v1",
-    OPENAI_TEXT_MODEL: "gpt-5.6-sol",
+    OPENAI_TEXT_MODEL: "claude-sonnet-4-6",
     OPENAI_TTS_MODEL: "tts-1",
     OPENAI_STT_MODEL: "whisper-1",
     OPENAI_REALTIME_MODEL: "gpt-4o-realtime-preview",
@@ -146,7 +270,8 @@ function buildEnv({ dataDir, port, log = console.log }) {
   // 用户 .env 覆盖（填 API key 用）
   const userEnv = parseEnvFile(path.join(dataDir, ".env"));
   if (Object.keys(userEnv).length) log("已加载用户 .env 覆盖");
-  return { ...env, ...userEnv };
+  // 实例指纹是启动器的身份凭据，排在覆盖之后，不接受用户 .env 篡改
+  return { ...env, ...userEnv, APP_INSTANCE_ID: instanceId || "" };
 }
 
 module.exports = { initDatabase, buildEnv };

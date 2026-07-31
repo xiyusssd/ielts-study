@@ -1,7 +1,7 @@
 // 动态详情路由健康检查（阅读/听力/写作/词汇详情页）。
 import { chromium } from 'playwright';
 
-const BASE = process.env.BASE || 'http://localhost:3000';
+const BASE = process.env.BASE || 'http://127.0.0.1:3000';
 const EMAIL = process.env.EMAIL || 'test@example.com';
 const PASS = process.env.PASS || 'test1234';
 

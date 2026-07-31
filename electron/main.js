@@ -8,6 +8,7 @@ const path = require("path");
 const fs = require("fs");
 const net = require("net");
 const http = require("http");
+const crypto = require("crypto");
 const { initDatabase, buildEnv } = require("./db-init");
 
 let serverProc = null;
@@ -36,28 +37,58 @@ function log(msg) {
   process.stdout.write(line);
 }
 
-// 探测 3000-3020 首个空闲端口
-function findPort(start = 3000, max = 3020) {
-  return new Promise((resolve, reject) => {
-    let port = start;
-    const tryPort = () => {
-      const srv = net.createServer();
-      srv.once("error", () => {
-        srv.close();
-        if (++port > max) reject(new Error("端口 3000-3020 全被占"));
-        else tryPort();
-      });
-      srv.once("listening", () => srv.close(() => resolve(port)));
-      srv.listen(port, "127.0.0.1");
-    };
-    tryPort();
+// 本次启动的实例指纹：注入 server 环境，再由 /api/health 回显，
+// 用于确认应答者就是自己 spawn 的 server 而非同端口的外部服务。
+const INSTANCE_ID = crypto.randomBytes(12).toString("hex");
+
+// 取值域避开 3000 等公共端口：dev server、Docker 端口映射都爱占 3000，
+// 而通配监听（*:3000）会兜住发往 127.0.0.1 的连接，造成"探测空闲但实际被冒充"。
+const PORT_RANGE = { start: 43110, max: 43140 };
+
+const canBind = (port, host) =>
+  new Promise((resolve) => {
+    const srv = net.createServer();
+    srv.once("error", () => srv.close(() => resolve(false)));
+    srv.once("listening", () => srv.close(() => resolve(true)));
+    srv.listen(port, host);
   });
+
+const nobodyListening = (port, host) =>
+  new Promise((resolve) => {
+    const sock = net.connect({ port, host });
+    const done = (free) => {
+      sock.destroy();
+      resolve(free);
+    };
+    sock.setTimeout(600);
+    sock.once("connect", () => done(false));
+    sock.once("error", () => done(true));
+    sock.once("timeout", () => done(true));
+  });
+
+// 单靠 bind 探测不可信：SO_REUSEADDR 下更具体地址能绑在通配监听之上。
+// 因此三项全过才算可独占：能绑通配地址，且 v4/v6 回环都没人应答。
+async function probeFree(port) {
+  return (
+    (await canBind(port, "0.0.0.0")) &&
+    (await nobodyListening(port, "127.0.0.1")) &&
+    (await nobodyListening(port, "::1"))
+  );
 }
 
-// 轮询 /api/health 直到 ok
+async function findPort({ start, max } = PORT_RANGE) {
+  for (let port = start; port <= max; port++) {
+    if (await probeFree(port)) return port;
+  }
+  throw new Error(`端口 ${start}-${max} 全被占`);
+}
+
+// 轮询 /api/health，直到应答者自证是本次启动的实例。
+// 只认 ok 是不够的：同端口的其他服务同样会返回 ok，窗口就会加载别人的库。
 function waitHealth(port, tries = 30) {
   return new Promise((resolve, reject) => {
     let n = 0;
+    let impostor = null;
     const ping = () => {
       http
         .get({ host: "127.0.0.1", port, path: "/api/health", timeout: 2000 }, (res) => {
@@ -65,7 +96,9 @@ function waitHealth(port, tries = 30) {
           res.on("data", (d) => (body += d));
           res.on("end", () => {
             try {
-              if (JSON.parse(body).ok) return resolve();
+              const j = JSON.parse(body);
+              if (j.ok && j.instanceId === INSTANCE_ID) return resolve();
+              if (j.ok) impostor = j.instanceId ? `instanceId=${j.instanceId}` : "无 instanceId 字段";
             } catch {
               /* 未就绪 */
             }
@@ -79,7 +112,15 @@ function waitHealth(port, tries = 30) {
         });
     };
     const retry = () => {
-      if (++n >= tries) return reject(new Error("server 健康检查超时"));
+      if (++n >= tries) {
+        return reject(
+          new Error(
+            impostor
+              ? `端口 ${port} 被其他服务占用（${impostor}），本机可能已有服务监听该端口`
+              : "server 健康检查超时",
+          ),
+        );
+      }
       setTimeout(ping, 1000);
     };
     ping();
@@ -92,8 +133,8 @@ async function start() {
   initDatabase({ dataDir: DATA_DIR, templateDb: TEMPLATE_DB, log });
 
   const port = await findPort();
-  log(`PORT: ${port}`);
-  const env = buildEnv({ dataDir: DATA_DIR, port, log });
+  log(`PORT: ${port} (instance ${INSTANCE_ID})`);
+  const env = buildEnv({ dataDir: DATA_DIR, port, instanceId: INSTANCE_ID, log });
 
   // node22 可执行位兜底
   try {
@@ -116,7 +157,19 @@ async function start() {
     height: 860,
     title: "雅思学习助手",
     backgroundColor: "#ffffff",
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      // 本地 server 每次启动都是新实例，禁用磁盘缓存避免旧 chunk 残留
+      partition: "persist:app",
+    },
+  });
+  // 禁用 HTTP 缓存：本地 server 无需缓存，彻底杜绝旧 Server Action ID 问题
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, cb) => {
+    const headers = { ...details.responseHeaders };
+    headers["Cache-Control"] = ["no-store, no-cache, must-revalidate"];
+    headers["Pragma"] = ["no-cache"];
+    cb({ responseHeaders: headers });
   });
   mainWindow.loadURL(`http://127.0.0.1:${port}`);
   mainWindow.on("closed", () => (mainWindow = null));
@@ -130,6 +183,20 @@ app.whenReady().then(async () => {
   } catch {
     /* 非 mac 或不支持时忽略 */
   }
+
+  // 清除 Chromium HTTP 缓存 + Service Worker，防止旧 build 的 JS chunk
+  // 残留导致 "Failed to find Server Action" 错误。
+  // 本地 server 每次启动都是全新实例，缓存无价值。
+  try {
+    await session.defaultSession.clearCache();
+    await session.defaultSession.clearStorageData({
+      storages: ["serviceworkers", "cachestorage"],
+    });
+    log("已清除 HTTP 缓存和 Service Worker");
+  } catch (e) {
+    log("清缓存失败（非致命）: " + e.message);
+  }
+
   start().catch((e) => {
     log("启动失败: " + (e && e.stack ? e.stack : e));
     dialog.showErrorBox("启动失败", `${e}\n\n日志：${LOG_FILE}`);

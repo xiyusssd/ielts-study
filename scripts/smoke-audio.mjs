@@ -1,6 +1,6 @@
 // 验证单词发音：①本地音频 HTTP 可取 ②拼写模式有单词+例句发音按钮 ③Audio 能加载本地 m4a
 import { chromium } from 'playwright';
-const BASE = process.env.BASE || 'http://localhost:3000';
+const BASE = process.env.BASE || 'http://127.0.0.1:3000';
 const EMAIL = process.env.EMAIL || 'test@example.com';
 const PASS = process.env.PASS || 'test1234';
 

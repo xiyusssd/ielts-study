@@ -1,6 +1,6 @@
 // 验证"手动填分跳过测试"：填 5 维分数 → 保存 → 报告页显示这些分数。
 import { chromium } from 'playwright';
-const BASE = process.env.BASE || 'http://localhost:3000';
+const BASE = process.env.BASE || 'http://127.0.0.1:3000';
 const EMAIL = process.env.EMAIL || 'test@example.com';
 const PASS = process.env.PASS || 'test1234';
 

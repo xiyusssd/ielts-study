@@ -4,7 +4,7 @@
 // 3) 看报告页 —— 若其余 4 项被清零 = bug
 import { chromium } from 'playwright';
 
-const BASE = process.env.BASE || 'http://localhost:3000';
+const BASE = process.env.BASE || 'http://127.0.0.1:3000';
 const EMAIL = process.env.EMAIL || 'test@example.com';
 const PASS = process.env.PASS || 'test1234';
 const log = (...a) => console.log(...a);

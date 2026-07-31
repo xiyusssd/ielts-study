@@ -1,8 +1,15 @@
+# 目录名为非 ASCII（雅思），compose 从目录推导的项目名会是空串并直接报错，
+# 因此显式固化项目名；取值与既有容器的 com.docker.compose.project 标签一致，
+# 保证接管的是同一套容器和 ielts_app-data 卷，而非新建一份。
+name: ielts
+
 services:
   app:
     build: .
+    # 宿主端口刻意避开 3000：dev.sh 的 next dev 与全部 smoke 脚本都用 3000，
+    # 容器若也占 3000，通配监听会兜住发往回环的连接，导致"测的是哪个实例"无法确定。
     ports:
-      - "3000:3000"
+      - "${APP_HOST_PORT:-3100}:3000"
     environment:
       DATABASE_URL: "file:/app/data/prod.db"
       SESSION_SECRET: "${SESSION_SECRET}"
@@ -20,7 +27,9 @@ services:
       ANTHROPIC_TEXT_MODEL: "${ANTHROPIC_TEXT_MODEL:-claude-sonnet-4-6}"
       OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
       OLLAMA_TEXT_MODEL: "${OLLAMA_TEXT_MODEL:-qwen2.5:7b}"
-      NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
+      # 不复用 NEXT_PUBLIC_APP_URL：.env 里那份是给本机 dev(3000) 用的，
+      # 会盖掉这里的默认值，使容器自认在 3000 而实际映射在 APP_HOST_PORT。
+      NEXT_PUBLIC_APP_URL: "${APP_PUBLIC_URL:-http://127.0.0.1:${APP_HOST_PORT:-3100}}"
     volumes:
       - ./content:/app/content
       - app-data:/app/data

@@ -17,7 +17,7 @@ import {
 } from "../lib/scoring/band-mapper.ts";
 
 const prisma = new PrismaClient();
-const BASE = "http://localhost:3000";
+const BASE = process.env.BASE || "http://127.0.0.1:3000";
 
 let pass = 0, fail = 0;
 const bugs = [];

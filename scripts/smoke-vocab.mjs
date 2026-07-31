@@ -2,7 +2,7 @@
 // 用法：node scripts/smoke-vocab.mjs
 import { chromium } from "playwright";
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.BASE || "http://127.0.0.1:3000";
 const results = [];
 function ok(name, cond, extra = "") { results.push({ name, pass: !!cond, extra }); }
 
