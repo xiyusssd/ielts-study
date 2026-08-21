@@ -14,6 +14,7 @@
     "db:migrate": "./node_modules/.bin/prisma migrate dev",
     "db:studio": "./node_modules/.bin/prisma studio",
     "db:seed": "./node_modules/.bin/tsx prisma/seed.ts",
+    "build:book-vocab": "./node_modules/.bin/tsx scripts/build-book-vocab.ts",
     "electron:dev": "next build && electron .",
     "electron:build": "./scripts/build-electron-app.sh"
   },

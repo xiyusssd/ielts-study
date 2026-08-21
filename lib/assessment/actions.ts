@@ -169,19 +169,22 @@ export async function submitReading(payload: { poolId: string; answers: Record<s
 /** 提交写作（需要 AI 批改，若无 key 则给 5.5 默认分并标记） */
 export async function submitWriting(payload: { content: string; wordCount: number; duration: number }) {
   const { assessment, results } = await getOrStartAssessment();
-  const { getEnv, providerReady } = await import("@/lib/env");
-  const env = getEnv();
+  const { getAiConfig } = await import("@/lib/ai/actions");
+  const aiCfg = await getAiConfig(assessment.userId);
 
   let scores = { tr: 5.5, cc: 5.5, lr: 5.5, gra: 5.5 };
   let feedback = "AI 批改暂未启用（未配置 API Key），此分数为占位。";
   let usedAI = false;
 
-  if (providerReady("text") && env.OPENAI_API_KEY) {
+  if (aiCfg.apiKey) {
     try {
       const { gradeWriting } = await import("@/lib/ai/writing-grader");
       const { friendlyAIError } = await import("@/lib/ai/errors");
       try {
-        const graded = await gradeWriting({ prompt: "assessment writing task", content: payload.content });
+        const graded = await gradeWriting(
+          { prompt: "assessment writing task", content: payload.content },
+          aiCfg,
+        );
         scores = graded.scores;
         feedback = graded.feedback;
         usedAI = true;
@@ -207,7 +210,8 @@ export async function submitWriting(payload: { content: string; wordCount: numbe
 /** 提交口语（同样支持无 key 降级） */
 export async function submitSpeaking(payload: { transcript: string; skipped?: boolean }) {
   const { assessment, results } = await getOrStartAssessment();
-  const { providerReady } = await import("@/lib/env");
+  const { getAiConfig } = await import("@/lib/ai/actions");
+  const aiCfg = await getAiConfig(assessment.userId);
 
   let scores = { fluency: 5.5, vocabulary: 5.5, grammar: 5.5, pronunciation: 5.5 };
   let feedback = payload.skipped
@@ -215,12 +219,15 @@ export async function submitSpeaking(payload: { transcript: string; skipped?: bo
     : "AI 评分暂未启用（未配置 API Key），此分数为占位。";
   let usedAI = false;
 
-  if (!payload.skipped && providerReady("text") && payload.transcript.trim()) {
+  if (!payload.skipped && aiCfg.apiKey && payload.transcript.trim()) {
     try {
       const { gradeSpeaking } = await import("@/lib/ai/speaking-grader");
       const { friendlyAIError } = await import("@/lib/ai/errors");
       try {
-        const graded = await gradeSpeaking({ transcript: payload.transcript });
+        const graded = await gradeSpeaking(
+          { transcript: payload.transcript },
+          aiCfg,
+        );
         scores = graded.scores;
         feedback = graded.feedback;
         usedAI = true;

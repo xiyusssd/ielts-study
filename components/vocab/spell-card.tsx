@@ -6,11 +6,12 @@ import { toast } from "sonner";
 import type { Grade } from "@/lib/srs/fsrs";
 import { reviewWord } from "@/lib/vocab/actions";
 import { playWord, playSentence } from "@/lib/audio/play";
+import { useCurrentWord } from "@/lib/vocab/current-word";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { SessionSummary } from "@/components/session-summary";
 import { AnswerSheet } from "@/components/vocab/answer-sheet";
-import { Volume2, Flame, Check, X, CornerDownLeft } from "lucide-react";
+import { Volume2, Flame, Check, X, CornerDownLeft, Lightbulb } from "lucide-react";
 
 type Word = {
   id: string;
@@ -37,10 +38,14 @@ export function SpellCard({ items }: { items: Item[] }) {
   const [caret, setCaret] = useState(0);
   const [checked, setChecked] = useState(false);
   const [correct, setCorrect] = useState(false);
+  const [usedHint, setUsedHint] = useState(false);
   const [done, setDone] = useState(0);
   const [focused, setFocused] = useState(false);
   const [pending, start] = useTransition();
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // 注册当前词供 Ctrl+Q 收藏
+  useCurrentWord(idx < items.length ? items[idx].word.id : null);
 
   useEffect(() => {
     if (!checked) inputRef.current?.focus();
@@ -84,14 +89,21 @@ export function SpellCard({ items }: { items: Item[] }) {
     const ok = norm(value) === norm(item.word.spelling);
     setCorrect(ok);
     setChecked(true);
-    if (ok) playTTS();
+    // 答对答错都播一遍正确发音，加强音形联结
+    playTTS();
   }
 
   function nextCard() {
-    const grade: Grade = correct ? 2 : 0;
+    // 用过提示仍答对 → 降为 Hard(1)，不记入"全对"；答错 → Again(0)
+    const grade: Grade = correct ? (usedHint ? 1 : 2) : 0;
     start(async () => {
       try {
-        const res = await reviewWord({ wordId: item.word.id, grade });
+        const res = await reviewWord({
+          wordId: item.word.id,
+          grade,
+          source: "spell",
+          wrongAnswer: correct ? undefined : value,
+        });
         if (!res.ok) {
           toast.error(res.error);
           return;
@@ -102,6 +114,7 @@ export function SpellCard({ items }: { items: Item[] }) {
         setCaret(0);
         setChecked(false);
         setCorrect(false);
+        setUsedHint(false);
       } catch (err) {
         toast.error("提交失败：" + (err as Error).message);
       }
@@ -176,6 +189,14 @@ export function SpellCard({ items }: { items: Item[] }) {
           size="lg"
         />
 
+        {usedHint && !checked && (
+          <div className="text-sm text-muted-foreground">
+            首字母：
+            <span className="font-bold text-foreground">{item.word.spelling[0]}</span>
+            {item.word.spelling.length > 1 && `（共 ${item.word.spelling.length} 个字母）`}
+          </div>
+        )}
+
         {example && (
           <div className="max-w-2xl text-center text-sm text-muted-foreground">
             <button
@@ -241,9 +262,24 @@ export function SpellCard({ items }: { items: Item[] }) {
         aria-label="拼写输入"
       />
 
-      {/* 底栏：操作 */}
+      {/* 底栏：提示 + 检查 */}
       <div className="border-t border-border/60 bg-card/60 px-6 py-4 backdrop-blur md:px-10">
-        <div className="mx-auto flex max-w-xl">
+        <div className="mx-auto flex max-w-xl items-center gap-3">
+          {!checked && (
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                setUsedHint(true);
+              }}
+              variant="outline"
+              size="lg"
+              disabled={usedHint}
+              title="显示单词首字母"
+            >
+              <Lightbulb className="h-4 w-4" />
+              提示
+            </Button>
+          )}
           {!checked ? (
             <Button
               onClick={(e) => {

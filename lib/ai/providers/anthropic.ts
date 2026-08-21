@@ -21,6 +21,14 @@ function getClient(): Anthropic {
   return client;
 }
 
+// 5 系及 Opus 4.7/4.8 已移除 sampling 参数（temperature/top_p/top_k），显式传入会返回 400 invalid_request_error
+const NO_SAMPLING_MODELS = /^claude-(fable-5|mythos-5|opus-5|sonnet-5|opus-4-[78])\b/;
+
+function samplingParams(model: string, opts: ChatOptions) {
+  if (NO_SAMPLING_MODELS.test(model)) return {};
+  return { temperature: opts.temperature ?? 0.3 };
+}
+
 function split(messages: ChatMessage[]) {
   const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
   const rest = messages
@@ -39,7 +47,7 @@ export const anthropicProvider: AIProvider = {
     const res = await c.messages.create({
       model: env.ANTHROPIC_TEXT_MODEL,
       max_tokens: opts.maxTokens ?? 4096,
-      temperature: opts.temperature ?? 0.3,
+      ...samplingParams(env.ANTHROPIC_TEXT_MODEL, opts),
       system: system || undefined,
       messages: rest,
     });

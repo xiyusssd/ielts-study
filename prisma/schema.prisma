@@ -23,6 +23,10 @@ model User {
   attempts      Attempt[]
   writings      WritingSubmission[]
   speakingLogs  SpeakingSession[]
+  wordBooks     WordBook[]
+  favorites     FavoriteWord[]
+  dictations    DictationAttempt[]
+  mistakes      MistakeWord[]
 }
 
 model Profile {
@@ -36,9 +40,13 @@ model Profile {
   examDate        DateTime?
   weeklyHours     Int?
   currentBand     String?   // JSON: { listening, reading, writing, speaking, vocab }
-  dailyNewWords   Int?      // 每日新词上限（用户可调，默认 20）
-  dailyReviewWords Int?     // 每日复习上限（用户可调，默认 100）
+  dailyNewWords   Int?      // 每日新词数（50-100，默认 50）
+  dailyReviewWords Int?     // 每日复习上限（= dailyNewWords × reviewRatio，冗余存储）
+  reviewRatio     Int       @default(2) // 复习:新词 配比（2 或 3，即 1:2 / 1:3）
   vocabBook       String?   // 锁定词书（如 ielts/toefl/cet6），null=全部词库
+  aiBaseUrl       String?   // 用户自定义文本网关 Base URL（覆盖 env），null=用 env
+  aiApiKey        String?   // 用户自定义文本网关 API Key（覆盖 env），null=用 env
+  aiTextModel     String?   // 用户在设置页选择的文本模型（覆盖 env 默认），null=用 env
   updatedAt       DateTime  @updatedAt
 }
 
@@ -93,14 +101,23 @@ model DailyTask {
 
 // ============ 词汇 ============
 model Word {
-  id           String @id @default(cuid())
-  spelling     String @unique
+  id           String  @id @default(cuid())
+  spelling     String  @unique
   ipa          String?
-  translations String // JSON [{pos, meaning}]
-  examples     String // JSON [{en, zh}]
-  level        Int    // 3000/5000/7000/8500
-  tags         String // 逗号分隔
+  translations String  // JSON [{pos, meaning}]
+  examples     String  // JSON [{en, zh}]
+  level        Int     // 3000/5000/7000/8500
+  tags         String  // 逗号分隔
+  freq         Int     @default(0) // 剑桥真题考频（由 scripts/build-book-vocab.ts 统计）
+  defEn        String? // 英文释义
+  etymology    String? // JSON [{part, meaning}] 词根词缀拆解
+  derivatives  String? // JSON [{word, pos, meaning}] 派生词
+  mnemonic     String? // 助记
+  story        String? // JSON {en, zh} AI 小故事
   progress     VocabProgress[]
+  chapters     ChapterWord[]
+  favorites    FavoriteWord[]
+  mistakes     MistakeWord[]
 }
 
 model VocabProgress {
@@ -119,6 +136,93 @@ model VocabProgress {
 
   @@unique([userId, wordId])
   @@index([userId, dueAt])
+}
+
+// ============ 词书 ============
+model WordBook {
+  id          String        @id @default(cuid())
+  slug        String        @unique // 官方词书自然键(ielts-reading/ielts-listening) / 自定义词书随机
+  title       String
+  description String?
+  kind        String        // official | custom
+  userId      String?       // custom 词书所属用户，official 为 null
+  user        User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+  chapters    WordChapter[]
+
+  @@index([kind])
+  @@index([userId])
+}
+
+model WordChapter {
+  id       String        @id @default(cuid())
+  bookId   String
+  book     WordBook      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  index    Int
+  title    String
+  subtitle String?       // 如 passage 标题 / 来源说明
+  words    ChapterWord[]
+
+  @@unique([bookId, index])
+}
+
+model ChapterWord {
+  id        String      @id @default(cuid())
+  chapterId String
+  chapter   WordChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  wordId    String
+  word      Word        @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  index     Int         // 章节内排序（按考频降序）
+  freq      Int         // 该章节内出现频次
+
+  @@unique([chapterId, wordId])
+  @@index([wordId])
+}
+
+// ============ 生词本 / 听写 / 错词 ============
+model FavoriteWord {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wordId    String
+  word      Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, wordId])
+  @@index([userId, createdAt])
+}
+
+model DictationAttempt {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope     String   // book | chapter | mistakes | favorites | random
+  scopeId   String?  // bookId / chapterId
+  total     Int
+  correct   Int
+  accuracy  Float
+  duration  Int      // 秒
+  mistakes  String   // JSON: [wordId]
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model MistakeWord {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wordId      String
+  word        Word      @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  source      String    // dictation | study | spell | sentence
+  wrongAnswer String?
+  count       Int       @default(1)
+  lastWrongAt DateTime  @default(now())
+  mastered    Boolean   @default(false)
+
+  @@unique([userId, wordId])
+  @@index([userId, mastered, lastWrongAt])
 }
 
 // ============ 阅读 / 听力题库 ============

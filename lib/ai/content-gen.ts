@@ -1,4 +1,5 @@
 import { ai } from "@/lib/ai";
+import type { TextClientOverrides } from "@/lib/ai/provider";
 import { READING_GEN_PROMPT, READING_GEN_SCHEMA } from "@/lib/ai/prompts/reading";
 
 export type GeneratedPassage = {
@@ -36,6 +37,7 @@ const LEVEL_PROMPT: Record<SentenceLevel, string> = {
 export async function generateExampleSentence(
   word: string,
   level: SentenceLevel = "standard",
+  overrides?: TextClientOverrides,
 ): Promise<{ en: string; zh: string }> {
   const provider = ai("text");
   if (!provider.chatJSON) throw new Error(`${provider.name} 不支持结构化输出`);
@@ -47,7 +49,7 @@ export async function generateExampleSentence(
       { role: "user", content: `单词：${word}` },
     ],
     SENTENCE_SCHEMA,
-    { temperature: 0.8, maxTokens: 200 },
+    { temperature: 0.8, maxTokens: 200, ...overrides },
   );
   const en = raw.en ?? raw.sentence ?? raw.english ?? raw.text ?? "";
   const zh = raw.zh ?? raw.translation ?? raw.chinese ?? raw.cn ?? "";
@@ -58,6 +60,9 @@ export async function generateExampleSentence(
 export async function generateReadingPassage(opts: {
   targetBand: number;
   topic?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  model?: string;
 }): Promise<GeneratedPassage> {
   const provider = ai("text");
   if (!provider.chatJSON) throw new Error(`${provider.name} 不支持结构化输出`);
@@ -71,6 +76,12 @@ export async function generateReadingPassage(opts: {
       },
     ],
     READING_GEN_SCHEMA,
-    { temperature: 0.7, maxTokens: 4000 },
+    {
+      temperature: 0.7,
+      maxTokens: 4000,
+      model: opts.model,
+      baseUrl: opts.baseUrl,
+      apiKey: opts.apiKey,
+    },
   );
 }

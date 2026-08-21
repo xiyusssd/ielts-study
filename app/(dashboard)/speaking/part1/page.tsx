@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { providerReady } from "@/lib/env";
+import { aiTextReady } from "@/lib/ai/actions";
 import { SpeakingSessionRunner } from "@/components/speaking/session-runner";
 
 export default async function SpeakingPart1Page() {
@@ -21,7 +22,7 @@ export default async function SpeakingPart1Page() {
   return (
     <SpeakingSessionRunner
       prompts={prompts}
-      aiReady={providerReady("text")}
+      aiReady={await aiTextReady(user.id)}
       voiceReady={providerReady("voice")}
     />
   );

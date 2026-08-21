@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { SessionSummary } from "@/components/session-summary";
 import { AnswerSheet } from "@/components/vocab/answer-sheet";
 import { normSentence } from "@/lib/text/word-diff";
+import { useCurrentWord } from "@/lib/vocab/current-word";
 import { Volume2, Flame, Eye, EyeOff, CornerDownLeft, Sparkles, Lightbulb } from "lucide-react";
 import { WordTTS } from "@/components/vocab/word-tts";
 
@@ -44,6 +45,9 @@ export function SentenceCard({ items, aiEnabled = false }: { items: Item[]; aiEn
   const [maxStreak, setMaxStreak] = useState(0);
   const [wrongItems, setWrongItems] = useState<Item[]>([]);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // 注册当前词供 Ctrl+Q 收藏
+  useCurrentWord(idx < queue.length ? queue[idx].word.id : null);
 
   useEffect(() => {
     if (!checked) inputRef.current?.focus();
@@ -174,7 +178,7 @@ export function SentenceCard({ items, aiEnabled = false }: { items: Item[]; aiEn
     if (!correct) setWrongItems((w) => (w.some((x) => x.word.id === item.word.id) ? w : [...w, item]));
     start(async () => {
       try {
-        const res = await reviewWord({ wordId: item.word.id, grade });
+        const res = await reviewWord({ wordId: item.word.id, grade, source: "sentence" });
         if (!res.ok) {
           toast.error(res.error);
           return;

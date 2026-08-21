@@ -1,4 +1,5 @@
 import { ai } from "@/lib/ai";
+import type { TextClientOverrides } from "@/lib/ai/provider";
 import { WRITING_GRADE_PROMPT, WRITING_GRADE_SCHEMA } from "@/lib/ai/prompts/writing";
 
 export type WritingGradeResult = {
@@ -8,7 +9,10 @@ export type WritingGradeResult = {
   corrections: { wrong: string; correct: string; explain: string }[];
 };
 
-export async function gradeWriting(input: { prompt: string; content: string }): Promise<WritingGradeResult> {
+export async function gradeWriting(
+  input: { prompt: string; content: string },
+  overrides?: TextClientOverrides,
+): Promise<WritingGradeResult> {
   const provider = ai("text");
   if (!provider.chatJSON) throw new Error(`${provider.name} 不支持结构化输出`);
 
@@ -18,7 +22,7 @@ export async function gradeWriting(input: { prompt: string; content: string }): 
       { role: "user", content: `TASK PROMPT:\n${input.prompt}\n\nSTUDENT RESPONSE:\n${input.content}` },
     ],
     WRITING_GRADE_SCHEMA,
-    { temperature: 0.3, maxTokens: 2000 },
+    { temperature: 0.3, maxTokens: 2000, ...overrides },
   );
 
   // 归一化：把 4 维 score 换算成 overall

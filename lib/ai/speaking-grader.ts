@@ -1,4 +1,5 @@
 import { ai } from "@/lib/ai";
+import type { TextClientOverrides } from "@/lib/ai/provider";
 import { SPEAKING_GRADE_PROMPT, SPEAKING_GRADE_SCHEMA } from "@/lib/ai/prompts/speaking";
 
 export type SpeakingGradeResult = {
@@ -14,7 +15,10 @@ export type SpeakingGradeResult = {
   improvements: string[];
 };
 
-export async function gradeSpeaking(input: { transcript: string }): Promise<SpeakingGradeResult> {
+export async function gradeSpeaking(
+  input: { transcript: string },
+  overrides?: TextClientOverrides,
+): Promise<SpeakingGradeResult> {
   const provider = ai("text");
   if (!provider.chatJSON) throw new Error(`${provider.name} 不支持结构化输出`);
 
@@ -24,7 +28,7 @@ export async function gradeSpeaking(input: { transcript: string }): Promise<Spea
       { role: "user", content: `TRANSCRIPT:\n${input.transcript}` },
     ],
     SPEAKING_GRADE_SCHEMA,
-    { temperature: 0.3, maxTokens: 1500 },
+    { temperature: 0.3, maxTokens: 1500, ...overrides },
   );
 
   const overall = (graded.scores.fluency + graded.scores.vocabulary + graded.scores.grammar + graded.scores.pronunciation) / 4;

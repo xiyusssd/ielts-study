@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getEnv, providerReady } from "@/lib/env";
 import { listProviders } from "@/lib/ai";
+import { AiProviderConfig } from "@/components/settings/ai-provider-config";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
@@ -35,6 +36,18 @@ export default async function SettingsPage() {
           </Button>
         }
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>AI 服务配置（文本能力）</CardTitle>
+          <CardDescription>
+            接入任意 OpenAI 兼容网关：自定义 Base URL、API Key 和模型，保存后立即生效于写作/口语批改、AI 例句、小故事等全部文本能力。留空则使用 .env 配置。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AiProviderConfig />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

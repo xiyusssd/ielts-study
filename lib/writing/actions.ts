@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUserOrRedirect } from "@/lib/auth/require";
-import { providerReady, getEnv } from "@/lib/env";
+import { getEnv } from "@/lib/env";
 import { writingBand } from "@/lib/scoring/band-mapper";
 
 /** 提交作文并触发 AI 批改（无 key 时降级到默认分） */
@@ -20,7 +20,9 @@ export async function submitEssay(input: {
   if (!promptRec) throw new Error("题目不存在");
 
   const env = getEnv();
-  const aiReady = providerReady("text") && !!env.OPENAI_API_KEY;
+  const { getAiConfig } = await import("@/lib/ai/actions");
+  const aiCfg = await getAiConfig(user.id);
+  const aiReady = !!aiCfg.apiKey;
 
   type GradedShape = {
     scores: { tr: number; cc: number; lr: number; gra: number; overall?: number };
@@ -43,10 +45,10 @@ export async function submitEssay(input: {
       const { gradeWriting } = await import("@/lib/ai/writing-grader");
       const { friendlyAIError } = await import("@/lib/ai/errors");
       try {
-        const result = await gradeWriting({ prompt: promptRec.prompt, content: input.content });
+        const result = await gradeWriting({ prompt: promptRec.prompt, content: input.content }, aiCfg);
         graded = result;
         providerName = env.AI_TEXT_PROVIDER;
-        modelName = env.OPENAI_TEXT_MODEL;
+        modelName = aiCfg.model ?? null;
       } catch (e) {
         graded.feedback = `${friendlyAIError(e)}。以下为占位分数，可稍后重新提交。`;
       }

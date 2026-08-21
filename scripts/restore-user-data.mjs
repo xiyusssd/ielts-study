@@ -92,7 +92,7 @@ const RULES = [
 
 // Profile 不整行搬：目标分/examDate/weeklyHours 被 e2e 脚本污染过，
 // 只挑「确认由真人产生」的字段做「目标为空才填」的补齐。
-const PROFILE_FIELDS = ["currentBand", "dailyNewWords", "dailyReviewWords", "vocabBook"];
+const PROFILE_FIELDS = ["currentBand", "dailyNewWords", "dailyReviewWords", "reviewRatio", "vocabBook"];
 
 // ============ 真实性判据 ============
 // 每条 source 描述「从哪个库的哪个账号、按什么条件挑行」。

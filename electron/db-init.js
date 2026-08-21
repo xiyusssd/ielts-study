@@ -19,7 +19,7 @@ function sqlite(dbPath, sql) {
 const FP_SQL =
   "SELECT (SELECT count(*) FROM Word)||'_'||(SELECT count(*) FROM Passage)||'_'||" +
   "(SELECT count(*) FROM Question)||'_'||(SELECT count(*) FROM WritingPrompt)||'_'||" +
-  "(SELECT count(*) FROM SpeakingPrompt);";
+  "(SELECT count(*) FROM SpeakingPrompt)||'_'||(SELECT count(*) FROM WordBook);";
 
 // 用户数据表：同步流程绝不允许改动这些表的行数。
 // 历史上旧同步逻辑会 DELETE VocabProgress/Attempt/… 来「配合」内容表重灌，
@@ -35,6 +35,9 @@ const USER_TABLES = [
   "Plan",
   "WeekPlan",
   "DailyTask",
+  "FavoriteWord",
+  "DictationAttempt",
+  "MistakeWord",
 ];
 
 // 内容表同步规格：自然键 = 内容本身的标识，不依赖随机 id。
@@ -45,6 +48,9 @@ const CONTENT_SPEC = [
   { table: "Question", key: ["passageId", "index"], fks: { passageId: "Passage" } },
   { table: "WritingPrompt", key: ["task", "prompt"], fks: {} },
   { table: "SpeakingPrompt", key: ["part", "question"], fks: {} },
+  { table: "WordBook", key: ["slug"], fks: {} },
+  { table: "WordChapter", key: ["bookId", "index"], fks: { bookId: "WordBook" } },
+  { table: "ChapterWord", key: ["chapterId", "wordId"], fks: { chapterId: "WordChapter", wordId: "Word" } },
 ];
 
 const q = (name) => `"${name}"`;
@@ -56,6 +62,11 @@ const q = (name) => `"${name}"`;
  *   1. 本地 id 永不改变 —— 已存在的行只更新内容列，进度表外键因此始终有效
  *   2. 只增不删 —— 模板里没有的旧内容留在库里（可能有人的历史记录指着它）
  *   3. 不碰 USER_TABLES —— 整个语句里不出现这些表名
+ *
+ * map 用 TEMP VIEW 而不是快照 TABLE：视图是活查询，父表(如 WordBook)在同一事务里
+ * 先 INSERT 的新行，子表(WordChapter)建映射时立刻可见。旧实现用快照，模板新增的
+ * 父行不在快照里 → 子行外键翻译成 NULL → 整段 INSERT 违反 NOT NULL 外键而失败。
+ * COALESCE(n.id, t.id) 保证「本地还没有的行」映射到自己即将写入的模板 id。
  */
 function syncSql(tplDb, colsOf) {
   const out = [`ATTACH '${tplDb}' AS tpl;`, "BEGIN;"];
@@ -69,10 +80,10 @@ function syncSql(tplDb, colsOf) {
       fks[c] ? `(SELECT m.id FROM map_${fks[c]} m WHERE m.tpl_id = t.${q(c)})` : `t.${q(c)}`;
     const joinOn = key.map((k) => `n.${q(k)} IS ${tplVal(k)}`).join(" AND ");
 
-    // tpl_id → 本地 id 映射，供后续表的外键翻译使用
-    out.push(`CREATE TEMP TABLE map_${table} AS
-  SELECT t.id AS tpl_id, n.id AS id FROM tpl.${q(table)} t
-  JOIN main.${q(table)} n ON ${joinOn};`);
+    // tpl_id → 本地 id 映射，供后续表的外键翻译使用（活视图，随主库变化实时更新）
+    out.push(`CREATE TEMP VIEW map_${table} AS
+  SELECT t.id AS tpl_id, COALESCE(n.id, t.id) AS id FROM tpl.${q(table)} t
+  LEFT JOIN main.${q(table)} n ON ${joinOn};`);
 
     out.push(`UPDATE main.${q(table)} SET ${body.map((c) => `${q(c)} = ${tplVal(c)}`).join(", ")}
   FROM tpl.${q(table)} t
@@ -80,7 +91,7 @@ function syncSql(tplDb, colsOf) {
 
     out.push(`INSERT INTO main.${q(table)} (id, ${body.map(q).join(", ")})
   SELECT t.id, ${body.map(tplVal).join(", ")} FROM tpl.${q(table)} t
-  WHERE NOT EXISTS (SELECT 1 FROM map_${table} m WHERE m.tpl_id = t.id);`);
+  WHERE NOT EXISTS (SELECT 1 FROM main.${q(table)} n WHERE n.id = t.id);`);
   }
 
   out.push("COMMIT;", "DETACH tpl;");
@@ -94,6 +105,10 @@ function verifySql() {
     "SELECT 'dangling.Attempt.passage', COUNT(*) FROM Attempt a LEFT JOIN Passage p ON p.id=a.passageId WHERE a.passageId IS NOT NULL AND p.id IS NULL;",
     "SELECT 'dangling.Attempt.question', COUNT(*) FROM Attempt a LEFT JOIN Question x ON x.id=a.questionId WHERE a.questionId IS NOT NULL AND x.id IS NULL;",
     "SELECT 'dangling.WritingSubmission', COUNT(*) FROM WritingSubmission s LEFT JOIN WritingPrompt p ON p.id=s.promptId WHERE s.promptId IS NOT NULL AND p.id IS NULL;",
+    "SELECT 'dangling.ChapterWord.chapter', COUNT(*) FROM ChapterWord c LEFT JOIN WordChapter ch ON ch.id=c.chapterId WHERE ch.id IS NULL;",
+    "SELECT 'dangling.ChapterWord.word', COUNT(*) FROM ChapterWord c LEFT JOIN Word w ON w.id=c.wordId WHERE w.id IS NULL;",
+    "SELECT 'dangling.FavoriteWord', COUNT(*) FROM FavoriteWord f LEFT JOIN Word w ON w.id=f.wordId WHERE w.id IS NULL;",
+    "SELECT 'dangling.MistakeWord', COUNT(*) FROM MistakeWord m LEFT JOIN Word w ON w.id=m.wordId WHERE w.id IS NULL;",
   ].join("\n");
 }
 
@@ -102,17 +117,102 @@ function countsSql() {
   return USER_TABLES.map((t) => `SELECT '${t}', COUNT(*) FROM ${q(t)};`).join("\n");
 }
 
-// 幂等补列：新版加的可空列在这里补，老 data.db 缺列会崩
-function addCol(dbPath, table, col, def, log) {
+// 在 data.db 上执行一条 DDL，成功返回 true。
+function tryExec(dbPath, sqlText) {
   try {
-    sqlite(dbPath, `SELECT ${col} FROM ${table} LIMIT 1;`);
+    sqlite(dbPath, sqlText);
+    return true;
   } catch {
-    try {
-      sqlite(dbPath, `ALTER TABLE ${table} ADD COLUMN ${def};`);
-      log(`schema 补列 ${table}.${col}`);
-    } catch {
-      /* 忽略 */
+    return false;
+  }
+}
+
+/**
+ * 通用 schema 同步：以模板库为准，把老 data.db 缺的表/列/索引全部补齐。
+ *
+ * 模板库是打包时由 prisma db push 全新建出的，永远与当前代码一致 ——
+ * 所以这里不需要（也禁止）手工维护补列清单：schema.prisma 里任何新增的表/列/索引，
+ * 老用户下次启动即自动迁移。曾经的 addCol 手工清单漏加 aiBaseUrl/aiApiKey
+ * 导致 dashboard P2022 崩溃，就是手工清单漂移的教训。
+ *
+ * 约束：只增不改 —— 已存在的列绝不 ALTER，新列的类型/默认值永远取自模板。
+ */
+function syncSchema(dataDb, templateDb, log) {
+  let tplTables;
+  try {
+    tplTables = sqlite(
+      templateDb,
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_prisma_migrations' ORDER BY name;",
+    )
+      .split("\n")
+      .filter(Boolean);
+  } catch {
+    log("模板库不可用，跳过 schema 同步");
+    return;
+  }
+
+  const dataTables = new Set(
+    sqlite(dataDb, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
+      .split("\n")
+      .filter(Boolean),
+  );
+  const dataIndexes = new Set(
+    sqlite(dataDb, "SELECT name FROM sqlite_master WHERE type='index' AND sql IS NOT NULL ORDER BY name;")
+      .split("\n")
+      .filter(Boolean),
+  );
+
+  const addIndexes = (table) => {
+    const rows = sqlite(
+      templateDb,
+      `SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name='${table}' AND sql IS NOT NULL;`,
+    );
+    if (!rows) return;
+    for (const line of rows.split("\n").filter(Boolean)) {
+      const sep = line.indexOf("|");
+      const name = line.slice(0, sep);
+      if (dataIndexes.has(name)) continue;
+      const ddl = line.slice(sep + 1).replace(/^CREATE (UNIQUE )?INDEX /, "CREATE $1INDEX IF NOT EXISTS ");
+      if (tryExec(dataDb, ddl)) {
+        dataIndexes.add(name);
+        log(`schema 补索引 ${name}`);
+      }
     }
+  };
+
+  for (const table of tplTables) {
+    if (!dataTables.has(table)) {
+      // 缺表：整表 DDL + 索引照搬模板
+      const ddl = sqlite(templateDb, `SELECT sql FROM sqlite_master WHERE type='table' AND name='${table}';`);
+      if (ddl && tryExec(dataDb, ddl)) log(`schema 补表 ${table}`);
+      else log(`schema 补表失败 ${table}`);
+      addIndexes(table);
+      continue;
+    }
+
+    // 表已存在：缺列补列，类型/默认值取模板 pragma 定义
+    const have = new Set(
+      sqlite(dataDb, `SELECT name FROM pragma_table_info('${table}');`).split("\n").filter(Boolean),
+    );
+    const want = sqlite(
+      templateDb,
+      `SELECT name, COALESCE("type",''), COALESCE("notnull",0), COALESCE("dflt_value",'') FROM pragma_table_info('${table}');`,
+    );
+    if (want) {
+      for (const row of want.split("\n").filter(Boolean)) {
+        const [name, type, notnull, dflt] = row.split("|");
+        if (have.has(name)) continue;
+        const base = `ALTER TABLE ${q(table)} ADD COLUMN ${q(name)} ${type || "TEXT"}`;
+        // NOT NULL 无默认值只能对空表生效；非空表退化为补可空列
+        let ok = dflt ? tryExec(dataDb, `${base} DEFAULT ${dflt};`) : false;
+        if (!ok && notnull === "1") ok = tryExec(dataDb, `${base} NOT NULL;`);
+        if (!ok) ok = tryExec(dataDb, `${base};`);
+        log(ok ? `schema 补列 ${table}.${name}` : `schema 补列失败 ${table}.${name}`);
+      }
+    }
+
+    // 既有表也可能缺新索引（性能项，失败不致命）
+    addIndexes(table);
   }
 }
 
@@ -165,7 +265,7 @@ function syncContent({ dataDb, templateDb, log }) {
   }
 }
 
-// 首启拷贝模板 + 非首启内容同步 + schema 补列
+// 首启拷贝模板 + 非首启 schema 同步 + 内容同步
 function initDatabase({ dataDir, templateDb, log = console.log }) {
   fs.mkdirSync(dataDir, { recursive: true });
   const dataDb = path.join(dataDir, "data.db");
@@ -175,6 +275,9 @@ function initDatabase({ dataDir, templateDb, log = console.log }) {
     log("数据库从模板初始化");
     return;
   }
+
+  // 老库升级：以模板为准自动补齐表/列/索引（必须在指纹/内容同步之前，否则 syncSql 读不到表）
+  syncSchema(dataDb, templateDb, log);
 
   // 内容指纹比对：不同则同步题库/词库
   let tplFp = "";
@@ -196,11 +299,6 @@ function initDatabase({ dataDir, templateDb, log = console.log }) {
   } else if (tplFp && !synced) {
     fs.writeFileSync(marker, tplFp);
   }
-
-  // schema 升级：补齐用户表新增可空列
-  addCol(dataDb, "Profile", "dailyNewWords", "dailyNewWords INTEGER", log);
-  addCol(dataDb, "Profile", "dailyReviewWords", "dailyReviewWords INTEGER", log);
-  addCol(dataDb, "Profile", "vocabBook", "vocabBook TEXT", log);
 }
 
 // 解析用户 .env（手写 dotenv：KEY=VALUE，忽略注释/空行，去引号）
@@ -243,8 +341,10 @@ function buildEnv({ dataDir, port, instanceId, log = console.log }) {
     AI_STT_PROVIDER: "openai",
     AI_REALTIME_PROVIDER: "openai",
     OPENAI_BASE_URL: "https://api.openai.com/v1",
-    OPENAI_TEXT_BASE_URL: "https://airouter.linkof.link/v1",
-    OPENAI_TEXT_MODEL: "claude-sonnet-4-6",
+    // 文本能力默认走 tokenrhythm 网关（OpenAI 兼容），设置页可在线换模型
+    OPENAI_TEXT_API_KEY: "sk_tr_wwuZY4zWOXT16fCTM0RdrCcxpFvezyF7i9ceuoYN4cU",
+    OPENAI_TEXT_BASE_URL: "https://tokenrhythm.studio/v1",
+    OPENAI_TEXT_MODEL: "deepseek-v4-flash",
     OPENAI_TTS_MODEL: "tts-1",
     OPENAI_STT_MODEL: "whisper-1",
     OPENAI_REALTIME_MODEL: "gpt-4o-realtime-preview",
@@ -259,4 +359,4 @@ function buildEnv({ dataDir, port, instanceId, log = console.log }) {
   return { ...env, ...userEnv, APP_INSTANCE_ID: instanceId || "" };
 }
 
-module.exports = { initDatabase, buildEnv };
+module.exports = { initDatabase, buildEnv, syncSchema };

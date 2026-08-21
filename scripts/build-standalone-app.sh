@@ -207,18 +207,35 @@ SYNC
     fi
   fi
 
-  # schema 升级：补齐用户表新增的可空列（ADD COLUMN 安全幂等）。
-  # 内容同步只重灌内容表，不改用户表结构；新版加的列要在这里补，否则老 data.db 缺列会崩。
-  # 加列方式：SELECT 探测列是否存在，不存在才 ALTER。以后 schema 加列就在此加一行。
-  add_col() { # $1=表 $2=列 $3=列定义
-    "$SQLITE" "$DATA_DIR/data.db" "SELECT $2 FROM $1 LIMIT 1;" >/dev/null 2>&1 || {
-      "$SQLITE" "$DATA_DIR/data.db" "ALTER TABLE $1 ADD COLUMN $3;" 2>/dev/null \
-        && echo "[$(date)] schema 补列 $1.$2"
-    }
+  # schema 升级：以 template.db 为准，自动补齐老 data.db 缺的表/列（缺表照搬模板 DDL）。
+  # 不再手工维护加列清单 —— schema.prisma 里新增的表/列，老库启动即自动迁移。
+  # 手工清单漏加列（如 Profile.aiBaseUrl/aiApiKey）会让新代码对老库抛 P2022。
+  sync_schema() {
+    for t in $("$SQLITE" "$DIR/template.db" "SELECT name FROM sqlite_master WHERE type='table' AND name NOT GLOB 'sqlite_*' AND name NOT GLOB '_prisma_*';" 2>/dev/null); do
+      if "$SQLITE" "$DATA_DIR/data.db" "SELECT 1 FROM \"$t\" LIMIT 1;" >/dev/null 2>&1; then
+        # 表已存在：只补缺列（类型/默认值取模板 pragma 定义）
+        "$SQLITE" "$DIR/template.db" "SELECT name, COALESCE(\"type\",''), COALESCE(\"notnull\",0), COALESCE(\"dflt_value\",'') FROM pragma_table_info('$t');" 2>/dev/null \
+        | while IFS='|' read -r c typ nn dflt; do
+            [ -z "$c" ] && continue
+            "$SQLITE" "$DATA_DIR/data.db" "SELECT \"$c\" FROM \"$t\" LIMIT 1;" >/dev/null 2>&1 && continue
+            if [ -n "$dflt" ]; then
+              "$SQLITE" "$DATA_DIR/data.db" "ALTER TABLE \"$t\" ADD COLUMN \"$c\" $typ DEFAULT $dflt;" 2>/dev/null \
+                && echo "[$(date)] schema 补列 $t.$c"
+            else
+              "$SQLITE" "$DATA_DIR/data.db" "ALTER TABLE \"$t\" ADD COLUMN \"$c\" $typ;" 2>/dev/null \
+                && echo "[$(date)] schema 补列 $t.$c"
+            fi
+          done
+      else
+        # 缺表：照搬模板的建表 DDL + 索引
+        "$SQLITE" "$DATA_DIR/data.db" "$("$SQLITE" "$DIR/template.db" "SELECT sql FROM sqlite_master WHERE type='table' AND name='$t';")" 2>/dev/null \
+          && echo "[$(date)] schema 补表 $t"
+        TPL_IDX=$("$SQLITE" "$DIR/template.db" "SELECT group_concat(sql,';') FROM sqlite_master WHERE type='index' AND tbl_name='$t' AND sql IS NOT NULL;" 2>/dev/null)
+        [ -n "$TPL_IDX" ] && "$SQLITE" "$DATA_DIR/data.db" "$TPL_IDX" 2>/dev/null
+      fi
+    done
   }
-  add_col Profile dailyNewWords "dailyNewWords INTEGER"
-  add_col Profile dailyReviewWords "dailyReviewWords INTEGER"
-  add_col Profile vocabBook "vocabBook TEXT"
+  sync_schema
 fi
 
 # 找空闲端口

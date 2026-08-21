@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUserOrRedirect } from "@/lib/auth/require";
-import { providerReady, getEnv } from "@/lib/env";
+import { getEnv } from "@/lib/env";
 import { speakingBand } from "@/lib/scoring/band-mapper";
 
 export type SessionTurn = { role: "examiner" | "candidate"; text: string; ts: number };
@@ -18,6 +18,8 @@ export async function submitSpeakingSession(input: {
   const user = await requireUserOrRedirect();
 
   const env = getEnv();
+  const { getAiConfig } = await import("@/lib/ai/actions");
+  const aiCfg = await getAiConfig(user.id);
   const candidateText = input.transcript
     .filter((t) => t.role === "candidate")
     .map((t) => t.text)
@@ -32,18 +34,18 @@ export async function submitSpeakingSession(input: {
   let providerName: string | null = null;
   let modelName: string | null = null;
 
-  if (!input.skipped && candidateText.trim() && providerReady("text") && env.OPENAI_API_KEY) {
+  if (!input.skipped && candidateText.trim() && aiCfg.apiKey) {
     try {
       const { gradeSpeaking } = await import("@/lib/ai/speaking-grader");
       const { friendlyAIError } = await import("@/lib/ai/errors");
       try {
-        const result = await gradeSpeaking({ transcript: candidateText });
+        const result = await gradeSpeaking({ transcript: candidateText }, aiCfg);
         scores = result.scores;
         feedbackText = result.feedback;
         strengths = result.strengths;
         improvements = result.improvements;
         providerName = env.AI_TEXT_PROVIDER;
-        modelName = env.OPENAI_TEXT_MODEL;
+        modelName = aiCfg.model ?? null;
       } catch (e) {
         feedbackText = `${friendlyAIError(e)}。已保存你的回答，可稍后重新评分。`;
       }

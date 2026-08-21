@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
+import { aiTextReady } from "@/lib/ai/actions";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft } from "lucide-react";
 import { WordTTS } from "@/components/vocab/word-tts";
+import { WordEnrich } from "@/components/vocab/word-enrich";
+import { etymologyOf, derivativesOf, parseStory } from "@/lib/vocab/format";
 
 const SOURCE_LABELS: Record<string, string> = {
   ielts: "雅思", toefl: "托福", gre: "GRE", cet4: "四级", cet6: "六级",
@@ -62,6 +65,11 @@ export default async function WordDetailPage({ params }: { params: Promise<{ wor
                 {word.ipa && <span className="font-mono">{word.ipa}</span>}
                 <WordTTS text={word.spelling} />
                 {cefr && <Badge variant="outline">{cefr}</Badge>}
+                {word.freq > 0 && (
+                  <Badge variant="outline" className="border-primary/40 text-primary">
+                    真题考频 {word.freq}
+                  </Badge>
+                )}
                 {sources.map((s) => (
                   <Badge key={s} variant="default">{SOURCE_LABELS[s] ?? s}</Badge>
                 ))}
@@ -110,6 +118,25 @@ export default async function WordDetailPage({ params }: { params: Promise<{ wor
               </div>
             </section>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">AI 深度记忆</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <WordEnrich
+            wordId={word.id}
+            aiEnabled={await aiTextReady(user.id)}
+            initial={{
+              defEn: word.defEn ?? "",
+              etymology: etymologyOf(word.etymology),
+              derivatives: derivativesOf(word.derivatives),
+              mnemonic: word.mnemonic ?? "",
+            }}
+            initialStory={parseStory(word.story)}
+          />
         </CardContent>
       </Card>
     </div>

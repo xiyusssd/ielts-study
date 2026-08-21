@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { WeekTasks } from "@/components/planner/week-tasks";
 import { DailyGoals } from "@/components/vocab/daily-goals";
-import { DEFAULT_DAILY_NEW, DEFAULT_DAILY_REVIEW } from "@/lib/vocab/config";
+import { normalizeDailyGoals, DEFAULT_DAILY_NEW, DEFAULT_REVIEW_RATIO } from "@/lib/vocab/config";
 import { Target, Calendar, Clock, Pencil } from "lucide-react";
 
 const MODULE_LABEL: Record<string, string> = {
@@ -36,6 +36,10 @@ export default async function PlanPage() {
 
   if (!plan) redirect("/plan/setup");
 
+  const dailyGoals = normalizeDailyGoals(
+    profile?.dailyNewWords ?? DEFAULT_DAILY_NEW,
+    profile?.reviewRatio ?? DEFAULT_REVIEW_RATIO,
+  );
   const totalTasks = plan.weeks.reduce((s, w) => s + w.tasks.length, 0);
   const doneTasks = plan.weeks.reduce((s, w) => s + w.tasks.filter((t) => t.completed).length, 0);
   const now = new Date();
@@ -103,10 +107,7 @@ export default async function PlanPage() {
         </Card>
       </div>
 
-      <DailyGoals
-        newWords={profile?.dailyNewWords ?? DEFAULT_DAILY_NEW}
-        reviewWords={profile?.dailyReviewWords ?? DEFAULT_DAILY_REVIEW}
-      />
+      <DailyGoals newWords={dailyGoals.newWords} ratio={dailyGoals.ratio} />
 
       <Card>
         <CardHeader>

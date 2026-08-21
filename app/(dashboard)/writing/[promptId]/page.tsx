@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
-import { providerReady } from "@/lib/env";
+import { aiTextReady } from "@/lib/ai/actions";
 import { EssayEditor } from "@/components/writing/essay-editor";
 
 export default async function WritingPromptPage({
@@ -30,7 +30,7 @@ export default async function WritingPromptPage({
         prompt={prompt.prompt}
         minWords={prompt.minWords}
         minutes={prompt.timeMinutes}
-        aiReady={providerReady("text")}
+        aiReady={await aiTextReady(user.id)}
       />
     </div>
   );

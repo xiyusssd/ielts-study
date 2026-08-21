@@ -76,7 +76,7 @@
 
 - **Electron 独立窗口版**(commit `8e533b5` + `2969066`),与现有浏览器版 .app **并存**,只做 macOS arm64。
   - 架构:Electron 主进程只做窗口壳,spawn 内嵌 node22 跑 standalone `server.js`,**Prisma 原生引擎完全隔离在子进程,绕过 macOS Library Validation**。等 `/api/health` 就绪后 `BrowserWindow.loadURL(127.0.0.1:PORT)`。主进程放行麦克风(setPermissionRequestHandler + askForMediaAccess)。
-  - 文件:`electron/main.js`(窗口/端口/health/spawn/权限/退出清理)、`electron/db-init.js`(移植 launcher 的 DB 初始化/内容指纹同步/schema 补列/buildEnv,sqlite 走系统 /usr/bin/sqlite3,零原生依赖)、`electron/after-pack.js`、`electron-builder.yml`、`build/entitlements.mac.plist`、`scripts/build-electron-app.sh`。package.json 加 main + electron:dev/build + devDeps(electron@43.2.0 / electron-builder@26.15.3)。
+  - 文件:`electron/main.js`(窗口/端口/health/spawn/权限/退出清理)、`electron/db-init.js`(移植 launcher 的 DB 初始化/内容指纹同步/schema 同步(模板驱动,自动补齐缺的表/列/索引)/buildEnv,sqlite 走系统 /usr/bin/sqlite3,零原生依赖)、`electron/after-pack.js`、`electron-builder.yml`、`build/entitlements.mac.plist`、`scripts/build-electron-app.sh`。package.json 加 main + electron:dev/build + devDeps(electron@43.2.0 / electron-builder@26.15.3)。
   - **关键坑已修**(afterPack):electron-builder 把 standalone 的 node_modules 收进 app.asar,而 node22 无法从 asar require → 打包产物 `Cannot find module 'next'`。dev 态/仓库内测试会**假性通过**(node 向上遍历找到仓库根 node_modules),**必须拷到 /tmp 脱离仓库验证**。afterPack hook 用 cp -R 把 standalone node_modules 复制到 Resources/app/node_modules(与 server.js 同级)修复。
   - **验证**:dev 态 `electron .` 弹窗+加载+server Ready+退出清理子进程无残留;打包产物拷到 /tmp 脱离仓库,`node server.js`→`/api/health` 返回 `{ok:true,db.words:5031,text:true}`,prisma 引擎正常。tsc 0 错误。
   - 产物:`dist-electron/雅思学习助手-0.1.0-arm64.dmg`(**456M**,gitignore)。未签名/未公证(本地自用,右键打开)。
@@ -124,7 +124,7 @@
 3. **airouter 文本接入**:文本能力(写作/口语批改)走 airouter,语音仍走官方 OpenAI。
    - `lib/env.ts` 加 `OPENAI_TEXT_API_KEY/_BASE_URL`(留空回落通用);`lib/ai/providers/openai.ts` 加 `getTextClient()` + `extractJSON()` 兜底(Claude 系不强制 schema)。
    - `.env` 已填:airouter=`https://airouter.linkof.link/v1` model=`gpt-5.6-sol`。语音三能力因没填官方 key 显示未启用(正常)。
-4. **词书锁定(持久)**:`Profile.vocabBook` 字段(已 db push + build 脚本 add_col)。词汇页"学习词书"卡片可锁定,今日队列新词只从该书抽。`BookPicker` 组件 + `saveVocabBook` action + `VOCAB_BOOKS` 常量。
+4. **词书锁定(持久)**:`Profile.vocabBook` 字段(已 db push)。词汇页"学习词书"卡片可锁定,今日队列新词只从该书抽。`BookPicker` 组件 + `saveVocabBook` action + `VOCAB_BOOKS` 常量。
 5. **句子拼写**:词汇第三种模式(翻卡/单词拼写/句子拼写循环切换)。`SentenceCard` 组件:看中文↔纯听写可切、整句输入、宽松判分(去标点/大小写)+ 逐词 diff。用词自带例句。
 6. **换 AI 句(新,⚠️ 仅网页端,未进 .app)**:句子拼写里"换 AI 句"按钮现场生成新例句(走 airouter)。`generateExampleSentence`(`lib/ai/content-gen.ts`,已做键名归一化兜底)+ `app/api/vocab/gen-sentence/route.ts`(登录+限流+providerReady门)。已直连实测生成成功。
 

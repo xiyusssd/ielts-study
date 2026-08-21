@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { GRADE_LABELS, type Grade } from "@/lib/srs/fsrs";
 import { reviewWord } from "@/lib/vocab/actions";
 import { playWord } from "@/lib/audio/play";
+import { useCurrentWord } from "@/lib/vocab/current-word";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -24,8 +24,7 @@ type Word = {
 
 type Item = { word: Word; isNew: boolean };
 
-export function StudyCard({ items, remaining }: { items: Item[]; remaining: number }) {
-  const router = useRouter();
+export function StudyCard({ items }: { items: Item[] }) {
   // 活动队列(支持"重点复习没记牢的"重开)
   const [queue, setQueue] = useState<Item[]>(items);
   const [idx, setIdx] = useState(0);
@@ -35,6 +34,29 @@ export function StudyCard({ items, remaining }: { items: Item[]; remaining: numb
   const [masteredCount, setMasteredCount] = useState(0);
   const [weakItems, setWeakItems] = useState<Item[]>([]);
   const [pending, start] = useTransition();
+
+  // 注册当前词供 Ctrl+Q 收藏
+  useCurrentWord(idx < queue.length ? queue[idx].word.id : null);
+
+  // 键盘操作：空格/回车翻卡，1-5 评分（翻卡后生效）
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+      if (idx >= queue.length) return;
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        if (!flipped) setFlipped(true);
+        return;
+      }
+      if (!flipped || pending) return;
+      const n = Number(e.key);
+      if (n >= 1 && n <= 5) grade((n - 1) as Grade);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   function restart(newQueue: Item[]) {
     setQueue(newQueue);
@@ -84,7 +106,7 @@ export function StudyCard({ items, remaining }: { items: Item[]; remaining: numb
   function grade(g: Grade) {
     start(async () => {
       try {
-        const res = await reviewWord({ wordId: item.word.id, grade: g });
+        const res = await reviewWord({ wordId: item.word.id, grade: g, source: "study" });
         if (!res.ok) {
           toast.error(res.error);
           return;
@@ -125,20 +147,21 @@ export function StudyCard({ items, remaining }: { items: Item[]; remaining: numb
       >
         <CardContent className="space-y-6 p-10 text-center">
           <div>
-            <div className="mb-2 text-5xl font-bold tracking-wide">{item.word.spelling}</div>
+            <div className="mb-2 flex items-center justify-center gap-3">
+              <div className="text-5xl font-bold tracking-wide">{item.word.spelling}</div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  playTTS();
+                }}
+                className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title="发音"
+              >
+                <Volume2 className="h-5 w-5" />
+              </button>
+            </div>
             {item.word.ipa && (
-              <div className="flex items-center justify-center gap-2 text-lg text-muted-foreground">
-                {item.word.ipa}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    playTTS();
-                  }}
-                  className="rounded-full p-1 hover:bg-muted"
-                >
-                  <Volume2 className="h-4 w-4" />
-                </button>
-              </div>
+              <div className="text-lg text-muted-foreground">{item.word.ipa}</div>
             )}
           </div>
 
@@ -162,7 +185,7 @@ export function StudyCard({ items, remaining }: { items: Item[]; remaining: numb
           ) : (
             <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <Eye className="h-4 w-4" />
-              点击卡片显示释义
+              点击卡片或按空格显示释义
             </div>
           )}
         </CardContent>
@@ -183,7 +206,7 @@ export function StudyCard({ items, remaining }: { items: Item[]; remaining: numb
                 onClick={() => grade(g)}
                 disabled={pending}
                 className={`rounded-lg ${bg} p-3 text-sm font-medium text-white transition disabled:opacity-50`}
-                title={label.hint}
+                title={`${label.hint} · 快捷键 ${g + 1}`}
               >
                 <div className="font-bold">{label.label}</div>
                 <div className="mt-1 text-xs opacity-90">{label.hint}</div>

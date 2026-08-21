@@ -60,6 +60,7 @@ tsconfig.tsbuildinfo
 资料/
 *.mdx
 *.mdd
+剑桥英汉（简体）词典/
 
 # 打包产物
 dist/

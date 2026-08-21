@@ -39,7 +39,7 @@ const p = new PrismaClient();
 p.user.count().then(c => { console.log('  template init:', c, 'users'); return p.\$disconnect(); });
 " 2>&1 | tail -2
 
-for s in seed-words seed-words-from-bank seed-passages seed-listening seed-writing seed-speaking seed-real-content; do
+for s in seed-words seed-words-from-bank seed-passages seed-listening seed-writing seed-speaking seed-real-content build-book-vocab; do
   DATABASE_URL="file:$ABS_DB" ./node_modules/.bin/tsx scripts/$s.ts 2>&1 | tail -1
 done
 DB_SIZE=$(du -h "$TEMPLATE_DB" | awk '{print $1}')
@@ -49,11 +49,21 @@ ok "数据库模板 $DB_SIZE"
 log "生成图标..."
 ICONSET="/tmp/ielts-electron-icon.iconset"
 rm -rf "$ICONSET"; mkdir -p "$ICONSET"
-if curl -sf http://localhost:3000/apple-icon -o /tmp/apple-icon.png 2>/dev/null; then
-  ok "从 :3000 抓取 apple-icon"
-elif curl -sf http://localhost:3001/apple-icon -o /tmp/apple-icon.png 2>/dev/null; then
-  ok "从 :3001 抓取 apple-icon"
-else
+
+# 端口可能被其他项目占用（如 OrbStack 占 3000），抓取后必须校验是真 PNG，
+# 否则 sips 会失败(exit 13)且 set -e 直接中断打包。
+ICON_SRC=""
+for port in 3000 3001 3002; do
+  if curl -sf "http://localhost:$port/apple-icon" -o /tmp/apple-icon.png 2>/dev/null \
+     && sips -g pixelWidth /tmp/apple-icon.png >/dev/null 2>&1; then
+    ICON_SRC="http://localhost:$port/apple-icon"
+    ok "从 :$port 抓取 apple-icon"
+    break
+  fi
+  rm -f /tmp/apple-icon.png
+done
+
+if [ -z "$ICON_SRC" ]; then
   cat > /tmp/icon.svg <<'SVG'
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
@@ -66,16 +76,24 @@ else
 </svg>
 SVG
   qlmanage -t -s 1024 -o /tmp /tmp/icon.svg >/dev/null 2>&1 && mv /tmp/icon.svg.png /tmp/apple-icon.png 2>/dev/null || true
+  [ -f /tmp/apple-icon.png ] && ok "SVG 兜底生成图标"
 fi
+
 if [ -f /tmp/apple-icon.png ]; then
   for size in 16 32 64 128 256 512 1024; do
-    sips -z $size $size /tmp/apple-icon.png --out "$ICONSET/icon_${size}x${size}.png" >/dev/null 2>&1
+    sips -z $size $size /tmp/apple-icon.png --out "$ICONSET/icon_${size}x${size}.png" >/dev/null 2>&1 || true
     if [ "$size" -lt 1024 ]; then
       dbl=$((size * 2))
-      [ $dbl -le 1024 ] && sips -z $dbl $dbl /tmp/apple-icon.png --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null 2>&1
+      if [ $dbl -le 1024 ]; then
+        sips -z $dbl $dbl /tmp/apple-icon.png --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null 2>&1 || true
+      fi
     fi
   done
-  iconutil -c icns "$ICONSET" -o build/icon.icns 2>/dev/null && ok "build/icon.icns 就位"
+  if iconutil -c icns "$ICONSET" -o build/icon.icns 2>/dev/null; then
+    ok "build/icon.icns 就位"
+  else
+    err "iconutil 失败"
+  fi
 fi
 rm -rf "$ICONSET" /tmp/apple-icon.png /tmp/icon.svg
 

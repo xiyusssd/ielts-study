@@ -1,4 +1,4 @@
-# 雅思学习助手
+# 雅思学习助手 · IELTS Study Assistant
 
 [![CI](https://github.com/xiyusssd/ielts-study/actions/workflows/ci.yml/badge.svg)](https://github.com/xiyusssd/ielts-study/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -6,6 +6,31 @@
 [![PWA](https://img.shields.io/badge/PWA-installable-5A0FC8)](https://web.dev/progressive-web-apps/)
 
 AI 驱动的 IELTS 备考平台：5 维水平测试 → 个性化学习计划 → 5 大模块 (词汇 · 阅读 · 听力 · 写作 · 口语) 闭环训练。
+
+An AI-powered IELTS preparation platform: a 5-dimension placement test feeds a personalized study plan, with closed-loop practice across five modules — vocabulary, reading, listening, writing, and speaking.
+
+> ⚠️ 本仓库为**公开**仓库。剑桥真题 PDF/音频、剑桥词典等版权内容已通过 `.gitignore` 排除，请勿强行提交；本地如需完整数据请自行获取放入 `content/`。
+
+## 功能总览
+
+| 模块 | 能力 |
+| --- | --- |
+| 🧭 水平评估 | 5 维（词汇 / 阅读 / 听力 / 写作 / 口语）自适应测评，生成 Band 预估报告 |
+| 📅 学习计划 | 根据测评结果自动生成个性化备考计划 |
+| 📚 词汇 | 真题词书、FSRS 间隔重复、单词/句子拼写、听写、错词本、生词本、AI 词根词缀与小故事 |
+| 📖 阅读 | 剑桥真题阅读 + 自动判分（含 TFNG 题型） |
+| 🎧 听力 | 真题听力 + 精听 / 听写 + 逐词 diff 批改 |
+| ✍️ 写作 | AI 批改（Task 1 / Task 2）+ 范文库 + 模板 |
+| 🎤 口语 | Part 1/2/3 练习，AI 评分 + Realtime 实时对话 |
+
+## 技术栈
+
+- **框架**：Next.js 15 (App Router) · React 19 · TypeScript
+- **数据库**：Prisma + SQLite（本地）/ PostgreSQL（Docker）
+- **AI**：OpenAI / Anthropic / Ollama 可切换（文本 · TTS · STT · Realtime）
+- **UI**：Tailwind CSS · Radix UI · Recharts · lucide-react
+- **认证**：iron-session（密码 + bcryptjs）
+- **部署**：PWA · Docker (OrbStack) · Electron 桌面端
 
 ## 快速开始
 
@@ -112,10 +137,6 @@ scripts/             一次性脚本（PDF 解析等）
 content/             (gitignored) 用户内容 · 剑桥 PDF · seed 词表
 ```
 
-## 完整目标树
-
-见 [`docs/GOAL_TREE.md`](docs/GOAL_TREE.md)（P0 阶段建设完成后从计划文档同步过来）
-
 ## ⚠️ 本机 macOS Sequoia 特殊说明
 
 系统默认的 `node`（`~/.local/bin/node`）来自 ChatGPT.app，带 Hardened Runtime 会拒绝加载 npm 生态的原生模块（Prisma、Next SWC、sharp 等）。**本项目必须用 `~/.local/node22/bin/node`**（Node.js 官方版）。
@@ -142,3 +163,11 @@ content/             (gitignored) 用户内容 · 剑桥 PDF · seed 词表
 - [x] P5 · 听力
 - [x] P6 · 口语（文本 + Realtime）
 - [x] P7 · Docker + Dashboard 完整化
+
+### 词汇模块功能
+
+- **真题词书**：`pnpm build:book-vocab` 从剑桥真题 Passage 挖词统计考频，生成「阅读真题词书」与「听力高频词书」；支持自建词书与章节管理（`/vocab/books`）
+- **多模式学习**：翻卡 / 单词拼写 / 句子拼写，FSRS 间隔重复（`/vocab/study`）
+- **单词听写**：逐词听写 + 自动批改 + 错词收集（`/vocab/dictation`）
+- **错词本 & 生词本**：错词复习（`/vocab/mistakes`）、生词收藏（`/vocab/favorites`，学习卡片中按 `Ctrl+Q` 快速收藏）
+- **AI 深度记忆**：单词详情页展示真题考频、英文释义、词根词缀、派生词、中文助记与单词小故事（`/vocab/[wordId]`）；「AI 小故事」页可从错词/生词本/最近学过中抽词生成语境故事（`/vocab/story`）

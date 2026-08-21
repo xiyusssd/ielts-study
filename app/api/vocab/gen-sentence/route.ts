@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/session";
-import { providerReady } from "@/lib/env";
+import { getAiConfig } from "@/lib/ai/actions";
 import { generateExampleSentence, type SentenceLevel } from "@/lib/ai/content-gen";
 import { friendlyAIError } from "@/lib/ai/errors";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
-/** 为一个单词现场生成新例句(句子拼写"换 AI 句")。文本走 airouter。 */
+/** 为一个单词现场生成新例句(句子拼写"换 AI 句")。 */
 export async function POST(req: Request) {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
 
-  if (!providerReady("text")) {
+  const cfg = await getAiConfig(user.id);
+  if (!cfg.apiKey) {
     return NextResponse.json(
       { error: "文本 AI 未配置，无法生成例句。" },
       { status: 503 },
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
   if (!word) return NextResponse.json({ error: "缺少 word" }, { status: 400 });
 
   try {
-    const sentence = await generateExampleSentence(word, level);
+    const sentence = await generateExampleSentence(word, level, cfg);
     return NextResponse.json(sentence);
   } catch (err) {
     return NextResponse.json({ error: friendlyAIError(err) }, { status: 500 });
