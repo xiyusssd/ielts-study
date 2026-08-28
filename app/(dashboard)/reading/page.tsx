@@ -11,27 +11,46 @@ export default async function ReadingPage() {
   const user = await requireUser();
   if (!user) return null;
 
-  const [passages, attempts] = await Promise.all([
+  const [passages, attemptStats, recentAttempts] = await Promise.all([
+    // 列表只用到标题/题数/元信息，别把 Passage.content(每篇约 5KB，80 篇共 400KB) 拉进内存
     prisma.passage.findMany({
       where: { module: "reading", active: true },
-      include: { _count: { select: { questions: true } } },
+      select: {
+        id: true,
+        title: true,
+        metadata: true,
+        _count: { select: { questions: true } },
+      },
       orderBy: { createdAt: "asc" },
     }),
+    // 计数/最高分走聚合：早先用「最近 20 条」既当历史又当 Best，做题多了就明显偏低
+    prisma.attempt.groupBy({
+      by: ["passageId"],
+      where: { userId: user.id },
+      _count: { _all: true },
+      _max: { band: true },
+    }),
+    // 每篇卡片下方只展示最近几次记录，取一小段明细够用
     prisma.attempt.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
-      take: 20,
+      take: 60,
+      select: { id: true, passageId: true, band: true, createdAt: true },
     }),
   ]);
 
   const passageIds = new Set(passages.map((p) => p.id));
-  const readingAttempts = attempts.filter((a) => passageIds.has(a.passageId));
-  const byPassage = new Map<string, typeof readingAttempts>();
-  for (const a of readingAttempts) {
-    if (!byPassage.has(a.passageId)) byPassage.set(a.passageId, []);
-    byPassage.get(a.passageId)!.push(a);
+  const statByPassage = new Map(
+    attemptStats.filter((s) => passageIds.has(s.passageId)).map((s) => [s.passageId, s]),
+  );
+  const attemptTotal = [...statByPassage.values()].reduce((n, s) => n + s._count._all, 0);
+  const bestBand = [...statByPassage.values()].reduce((m, s) => Math.max(m, s._max.band ?? 0), 0);
+  const recentByPassage = new Map<string, typeof recentAttempts>();
+  for (const a of recentAttempts) {
+    if (!passageIds.has(a.passageId)) continue;
+    if (!recentByPassage.has(a.passageId)) recentByPassage.set(a.passageId, []);
+    recentByPassage.get(a.passageId)!.push(a);
   }
-  const bestBand = readingAttempts.reduce((max, a) => Math.max(max, a.band ?? 0), 0);
 
   return (
     <div className="space-y-6 animate-in-slide">
@@ -44,7 +63,7 @@ export default async function ReadingPage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard label="题目数" value={String(passages.length)} icon={FileText} color="text-blue-500" />
-        <StatCard label="历史做题" value={String(readingAttempts.length)} icon={ArrowRight} color="text-purple-500" />
+        <StatCard label="历史做题" value={String(attemptTotal)} icon={ArrowRight} color="text-purple-500" />
         <StatCard label="最高 Band" value={bestBand > 0 ? String(bestBand) : "—"} icon={Trophy} color="text-amber-500" highlight />
       </div>
 
@@ -60,8 +79,10 @@ export default async function ReadingPage() {
           <div className="grid gap-3 md:grid-cols-2">
             {passages.map((p) => {
               const meta = JSON.parse(p.metadata) as { difficulty: number; wordCount: number; topics: string[] };
-              const myAttempts = byPassage.get(p.id) ?? [];
-              const bestOnThis = myAttempts.reduce((m, a) => Math.max(m, a.band ?? 0), 0);
+              const stat = statByPassage.get(p.id);
+              const doneCount = stat?._count._all ?? 0;
+              const bestOnThis = stat?._max.band ?? 0;
+              const recent = recentByPassage.get(p.id) ?? [];
               return (
                 <Card key={p.id} className="card-hoverable">
                   <CardHeader className="pb-3">
@@ -86,13 +107,13 @@ export default async function ReadingPage() {
                   <CardContent className="pt-0">
                     <Button asChild size="sm" className="w-full">
                       <Link href={`/reading/${p.id}`}>
-                        {myAttempts.length > 0 ? "再做一次" : "开始阅读"}
+                        {doneCount > 0 ? "再做一次" : "开始阅读"}
                         <ArrowRight className="h-3 w-3" />
                       </Link>
                     </Button>
-                    {myAttempts.length > 0 && (
+                    {recent.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1 text-xs">
-                        {myAttempts.slice(0, 3).map((a) => (
+                        {recent.slice(0, 3).map((a) => (
                           <Link
                             key={a.id}
                             href={`/reading/${p.id}/result/${a.id}`}

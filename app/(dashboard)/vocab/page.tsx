@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { generateDailyQueue } from "@/lib/srs/queue";
+import { countDailyQueue } from "@/lib/srs/queue";
 import { normalizeDailyGoals, DEFAULT_DAILY_NEW, DEFAULT_REVIEW_RATIO } from "@/lib/vocab/config";
+import { countWordsByTag } from "@/lib/vocab/tag-counts";
 import { DailyGoals } from "@/components/vocab/daily-goals";
 import { BookPicker } from "@/components/vocab/book-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,40 +39,42 @@ export default async function VocabPage() {
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
-  const [queue, totalLearned, byLevel, recent, mistakeCount, favCount, bookCount, todayLearned] = await Promise.all([
-    generateDailyQueue(user.id, { newLimit: dailyNew, reviewLimit: dailyReview, source: lockedBook ?? undefined }),
-    prisma.vocabProgress.count({ where: { userId: user.id } }),
-    prisma.$queryRawUnsafe<{ level: number; c: bigint }[]>(
-      `SELECT w.level, COUNT(*) as c FROM VocabProgress vp
+  const tagKeys = [...SOURCE_ORDER, ...Object.keys(TOPIC_LABELS).map((t) => `t:${t}`)];
+  const [counts, totalLearned, byLevel, recent, mistakeCount, favCount, bookCount, todayLearned, tagCounts] =
+    await Promise.all([
+      // 首页只要两个数字，不需要把整条今日队列(含整行 Word)取出来
+      countDailyQueue(user.id, { newLimit: dailyNew, reviewLimit: dailyReview, source: lockedBook ?? undefined }),
+      prisma.vocabProgress.count({ where: { userId: user.id } }),
+      prisma.$queryRawUnsafe<{ level: number; c: bigint }[]>(
+        `SELECT w.level, COUNT(*) as c FROM VocabProgress vp
        JOIN Word w ON w.id = vp.wordId
        WHERE vp.userId = ? GROUP BY w.level ORDER BY w.level`,
-      user.id,
-    ),
-    prisma.vocabProgress.findMany({
-      where: { userId: user.id },
-      orderBy: { updatedAt: "desc" },
-      take: 8,
-      include: { word: true },
-    }),
-    prisma.mistakeWord.count({ where: { userId: user.id, mastered: false } }),
-    prisma.favoriteWord.count({ where: { userId: user.id } }),
-    prisma.wordBook.count(),
-    prisma.vocabProgress.count({ where: { userId: user.id, updatedAt: { gte: startOfToday } } }),
-  ]);
+        user.id,
+      ),
+      prisma.vocabProgress.findMany({
+        where: { userId: user.id },
+        orderBy: { updatedAt: "desc" },
+        take: 8,
+        include: { word: { select: { id: true, spelling: true, translations: true, level: true } } },
+      }),
+      prisma.mistakeWord.count({ where: { userId: user.id, mastered: false } }),
+      prisma.favoriteWord.count({ where: { userId: user.id } }),
+      prisma.wordBook.count(),
+      prisma.vocabProgress.count({ where: { userId: user.id, updatedAt: { gte: startOfToday } } }),
+      countWordsByTag(tagKeys),
+    ]);
 
-  const totalToStudy = queue.dueList.length + queue.newList.length;
+  const totalToStudy = counts.due + counts.fresh;
   // 真实今日进度：今天过过的词 / (已过 + 剩余队列)
   const donePct = Math.min(100, Math.round((todayLearned / Math.max(1, todayLearned + totalToStudy)) * 100));
 
   // 分类计数：按来源(裸 token)与话题(t: 前缀)统计词库覆盖，供分类学习入口
-  const srcCounts = await Promise.all(
-    SOURCE_ORDER.map(async (s) => ({ key: s, n: await prisma.word.count({ where: { tags: { contains: s } } }) })),
-  );
-  const topicCounts = await Promise.all(
-    Object.keys(TOPIC_LABELS).map(async (t) => ({ key: t, n: await prisma.word.count({ where: { tags: { contains: `t:${t}` } } }) })),
-  );
+  const srcCounts = SOURCE_ORDER.map((s) => ({ key: s, n: tagCounts[s] ?? 0 }));
   const sources = srcCounts.filter((x) => x.n > 0);
-  const topics = topicCounts.filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  const topics = Object.keys(TOPIC_LABELS)
+    .map((t) => ({ key: t, n: tagCounts[`t:${t}`] ?? 0 }))
+    .filter((x) => x.n > 0)
+    .sort((a, b) => b.n - a.n);
 
   return (
     <div className="space-y-6 animate-in-slide">
@@ -92,7 +95,7 @@ export default async function VocabPage() {
               </div>
               <div className="text-3xl font-bold">{totalToStudy} 词</div>
               <div className="mt-1 text-sm text-white/70">
-                {todayLearned} 已过 · {queue.dueList.length} 待复习 · {queue.newList.length} 新词
+                {todayLearned} 已过 · {counts.due} 待复习 · {counts.fresh} 新词
               </div>
             </div>
             {totalToStudy > 0 ? (

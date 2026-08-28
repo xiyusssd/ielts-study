@@ -1,5 +1,6 @@
 import { getIronSession, type SessionOptions } from "iron-session";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { getEnv } from "@/lib/env";
 import { prisma } from "@/lib/db";
 
@@ -27,7 +28,13 @@ export async function getSession() {
   return getIronSession<SessionData>(store, sessionOptions());
 }
 
-export async function requireUser() {
+/**
+ * 当前登录用户（未登录返回 null）。
+ *
+ * 用 React cache 包一层：一次请求里布局、页面、各 server action 都会调它，
+ * 不缓存等于每次都读 cookie + 查一遍 User 表。
+ */
+export const requireUser = cache(async () => {
   const session = await getSession();
   if (!session.userId) {
     return null;
@@ -39,4 +46,4 @@ export async function requireUser() {
   });
   if (!user) return null;
   return { id: user.id, email: user.email };
-}
+});

@@ -24,27 +24,34 @@ export default async function ListeningPage() {
   const user = await requireUser();
   if (!user) return null;
 
-  const [passages, attempts] = await Promise.all([
+  const [passages, attemptStats] = await Promise.all([
+    // 列表不渲染听力稿正文，别把 Passage.content 一起拉出来
     prisma.passage.findMany({
       where: { module: "listening", active: true },
-      include: { _count: { select: { questions: true } } },
+      select: {
+        id: true,
+        title: true,
+        source: true,
+        metadata: true,
+        _count: { select: { questions: true } },
+      },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.attempt.findMany({
+    // 计数/最高分走聚合：早先用「最近 50 条」当历史，做题多了数字就偏低
+    prisma.attempt.groupBy({
+      by: ["passageId"],
       where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-      take: 50,
+      _count: { _all: true },
+      _max: { band: true },
     }),
   ]);
 
   const passageIds = new Set(passages.map((p) => p.id));
-  const listeningAttempts = attempts.filter((a) => passageIds.has(a.passageId));
-  const byPassage = new Map<string, typeof listeningAttempts>();
-  for (const a of listeningAttempts) {
-    if (!byPassage.has(a.passageId)) byPassage.set(a.passageId, []);
-    byPassage.get(a.passageId)!.push(a);
-  }
-  const bestBand = listeningAttempts.reduce((m, a) => Math.max(m, a.band ?? 0), 0);
+  const statByPassage = new Map(
+    attemptStats.filter((s) => passageIds.has(s.passageId)).map((s) => [s.passageId, s]),
+  );
+  const attemptTotal = [...statByPassage.values()].reduce((n, s) => n + s._count._all, 0);
+  const bestBand = [...statByPassage.values()].reduce((m, s) => Math.max(m, s._max.band ?? 0), 0);
 
   // 分组：剑桥各册 → VOA → 内置样本
   type Row = (typeof passages)[number];
@@ -81,7 +88,7 @@ export default async function ListeningPage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard label="可用题目" value={String(passages.length)} icon={FileText} />
-        <StatCard label="历史做题" value={String(listeningAttempts.length)} icon={ArrowRight} />
+        <StatCard label="历史做题" value={String(attemptTotal)} icon={ArrowRight} />
         <StatCard label="最高 Band" value={bestBand > 0 ? String(bestBand) : "—"} icon={Trophy} highlight />
       </div>
 
@@ -100,8 +107,7 @@ export default async function ListeningPage() {
                   const meta = JSON.parse(p.metadata) as PassageMeta;
                   const cam = parseSource(p.source);
                   const section = cam?.section ?? meta.section;
-                  const my = byPassage.get(p.id) ?? [];
-                  const best = my.reduce((m, a) => Math.max(m, a.band ?? 0), 0);
+                  const best = statByPassage.get(p.id)?._max.band ?? 0;
                   return (
                     <div key={p.id} className="group relative flex items-center gap-3 pr-3 transition-colors hover:bg-muted/40">
                       {/* 整行主操作：做题 */}
