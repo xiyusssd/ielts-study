@@ -7,8 +7,6 @@ import { normalizeDailyGoals, DEFAULT_DAILY_NEW, DEFAULT_REVIEW_RATIO } from "@/
 import { StudyCard } from "@/components/vocab/study-card";
 import { SpellCard } from "@/components/vocab/spell-card";
 import { SentenceCard } from "@/components/vocab/sentence-card";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -116,28 +114,9 @@ export default async function VocabStudyPage({
 
   const modeLabel = sentenceMode ? "句子拼写" : spellMode ? "单词拼写" : "翻卡模式";
 
-  // 句子模式不走服务端空状态早退：答完最后一句后 reviewWord 触发 RSC 刷新会把
-  // 队列清空，若在此 return 会卸载 SentenceCard、顶掉客户端完成页。空状态交给卡片内部处理。
-  if (items.length === 0 && !sentenceMode) {
-    return (
-      <div className="mx-auto max-w-2xl">
-        <Card>
-          <CardContent className="space-y-4 p-8 text-center">
-            <h2 className="text-2xl font-bold">
-              {filterLabel ? `「${filterLabel}」暂无新词` : "今日已清空 🎉"}
-            </h2>
-            <p className="text-muted-foreground">
-              {filterLabel ? "该分类的词都已在学习队列中，换个分类试试。" : "没有待复习或新学的单词，来日方长。"}
-            </p>
-            <Button asChild>
-              <Link href="/vocab">返回词汇首页</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
+  // 注意：这里不做服务端空状态早退。会话进行中的任何 RSC 刷新（Ctrl+Q 收藏、
+  // 会话结束刷新计数）都会把队列算空，一旦在此 return 就会卸载正在进行的卡片、
+  // 顶掉完成页。空状态交给卡片内部的 EmptyQueue 处理。
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-2">
@@ -172,11 +151,11 @@ export default async function VocabStudyPage({
         </div>
       </div>
       {sentenceMode ? (
-        <SentenceCard items={items} aiEnabled={await aiTextReady(user.id)} />
+        <SentenceCard items={items} aiEnabled={await aiTextReady(user.id)} label={filterLabel} />
       ) : spellMode ? (
-        <SpellCard items={items} />
+        <SpellCard items={items} label={filterLabel} />
       ) : (
-        <StudyCard items={items} />
+        <StudyCard items={items} label={filterLabel} />
       )}
     </div>
   );

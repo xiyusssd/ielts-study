@@ -4,14 +4,15 @@ import { useState, useTransition, useRef, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type { Grade } from "@/lib/srs/fsrs";
-import { reviewWord } from "@/lib/vocab/actions";
+import { reviewWord, finishVocabSession } from "@/lib/vocab/actions";
 import { playWord, playSentence } from "@/lib/audio/play";
 import { useCurrentWord } from "@/lib/vocab/current-word";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { SessionSummary } from "@/components/session-summary";
 import { AnswerSheet } from "@/components/vocab/answer-sheet";
-import { Volume2, Flame, Check, X, CornerDownLeft, Lightbulb } from "lucide-react";
+import { EmptyQueue } from "@/components/vocab/empty-queue";
+import { Volume2, Check, X, CornerDownLeft, Lightbulb } from "lucide-react";
 
 type Word = {
   id: string;
@@ -32,7 +33,10 @@ function blankSentence(en: string, word: string): string {
   return en.replace(re, "____");
 }
 
-export function SpellCard({ items }: { items: Item[] }) {
+export function SpellCard({ items, label }: { items: Item[]; label?: string | null }) {
+  // 会话队列只在挂载时快照一次：服务端刷新（收藏 / 结束刷计数）会把今日队列算空或算短，
+  // 直接用 props 会让进行中的会话被拖到"已完成"。
+  const [queue, setQueue] = useState<Item[]>(items);
   const [idx, setIdx] = useState(0);
   const [value, setValue] = useState("");
   const [caret, setCaret] = useState(0);
@@ -40,30 +44,62 @@ export function SpellCard({ items }: { items: Item[] }) {
   const [correct, setCorrect] = useState(false);
   const [usedHint, setUsedHint] = useState(false);
   const [done, setDone] = useState(0);
+  const [wrongItems, setWrongItems] = useState<Item[]>([]);
   const [focused, setFocused] = useState(false);
   const [pending, start] = useTransition();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const finishedRef = useRef(false);
 
   // 注册当前词供 Ctrl+Q 收藏
-  useCurrentWord(idx < items.length ? items[idx].word.id : null);
+  useCurrentWord(idx < queue.length ? queue[idx].word.id : null);
 
   useEffect(() => {
     if (!checked) inputRef.current?.focus();
   }, [idx, checked]);
 
-  if (idx >= items.length) {
-    const rate = items.length > 0 ? Math.round((done / items.length) * 100) : 0;
+  // 整轮结束才刷新计数（每张卡都刷会重跑今日队列、并打断会话）
+  const finished = queue.length > 0 && idx >= queue.length;
+  useEffect(() => {
+    if (!finished || finishedRef.current) return;
+    finishedRef.current = true;
+    void finishVocabSession();
+  }, [finished]);
+
+  function restart(next: Item[]) {
+    finishedRef.current = false;
+    setQueue(next);
+    setIdx(0);
+    setDone(0);
+    setWrongItems([]);
+    setValue("");
+    setCaret(0);
+    setChecked(false);
+    setCorrect(false);
+    setUsedHint(false);
+  }
+
+  if (queue.length === 0) {
+    return <EmptyQueue label={label} />;
+  }
+
+  if (idx >= queue.length) {
+    const rate = queue.length > 0 ? Math.round((done / queue.length) * 100) : 0;
     return (
       <SessionSummary
         title="拼写练习完成！"
         stats={[
-          { value: `${done}/${items.length}`, label: `答对 · ${rate}%`, tone: "success" },
-          { value: items.length - done, label: "答错", tone: "orange" },
+          { value: `${done}/${queue.length}`, label: `答对 · ${rate}%`, tone: "success" },
+          { value: queue.length - done, label: "答错", tone: "orange" },
         ]}
       >
         <Button asChild variant="outline">
           <Link href="/vocab">返回词汇首页</Link>
         </Button>
+        {wrongItems.length > 0 && (
+          <Button variant="secondary" onClick={() => restart(wrongItems)}>
+            只练错词（{wrongItems.length}）
+          </Button>
+        )}
         <Button asChild>
           <Link href="/">回到 Dashboard</Link>
         </Button>
@@ -71,11 +107,11 @@ export function SpellCard({ items }: { items: Item[] }) {
     );
   }
 
-  const item = items[idx];
+  const item = queue[idx];
   const translations = JSON.parse(item.word.translations) as { pos: string; meaning: string }[];
   const examples = JSON.parse(item.word.examples) as { en: string; zh: string }[];
   const example = examples[0];
-  const progress = (idx / items.length) * 100;
+  const progress = (idx / queue.length) * 100;
 
   function playTTS() {
     playWord(item.word.spelling);
@@ -86,6 +122,7 @@ export function SpellCard({ items }: { items: Item[] }) {
 
   function check() {
     if (checked || pending) return;
+    if (!value.trim()) return; // 空回车不判分（回车路径此前会直接记成答错）
     const ok = norm(value) === norm(item.word.spelling);
     setCorrect(ok);
     setChecked(true);
@@ -96,12 +133,17 @@ export function SpellCard({ items }: { items: Item[] }) {
   function nextCard() {
     // 用过提示仍答对 → 降为 Hard(1)，不记入"全对"；答错 → Again(0)
     const grade: Grade = correct ? (usedHint ? 1 : 2) : 0;
+    if (!correct) {
+      setWrongItems((w) => (w.some((x) => x.word.id === item.word.id) ? w : [...w, item]));
+    }
     start(async () => {
       try {
         const res = await reviewWord({
           wordId: item.word.id,
           grade,
           source: "spell",
+          // 拼对了（哪怕看过提示）就不该进错词本
+          mistake: !correct,
           wrongAnswer: correct ? undefined : value,
         });
         if (!res.ok) {
@@ -136,7 +178,7 @@ export function SpellCard({ items }: { items: Item[] }) {
       {/* 顶栏：进度 + 退出 */}
       <div className="flex items-center gap-4 px-6 py-4 md:px-10">
         <div className="text-sm font-medium text-muted-foreground nums">
-          {idx + 1} / {items.length}
+          {idx + 1} / {queue.length}
         </div>
         <Progress value={progress} className="h-1.5 flex-1" />
         <div className="flex items-center gap-2">
@@ -302,7 +344,7 @@ export function SpellCard({ items }: { items: Item[] }) {
               className="w-full"
               disabled={pending}
             >
-              {pending ? "提交中..." : idx + 1 >= items.length ? "完成" : "下一个"}{" "}
+              {pending ? "提交中..." : idx + 1 >= queue.length ? "完成" : "下一个"}{" "}
               <CornerDownLeft className="h-4 w-4" />
             </Button>
           )}

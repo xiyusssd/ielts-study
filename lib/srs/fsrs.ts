@@ -31,8 +31,13 @@ const W = [
 const REQUEST_RETENTION = 0.9;
 const MAX_INTERVAL_DAYS = 365 * 5;
 
-/** 初始 stability（首次评级后）*/
+/** 初始 stability（首次评级后）
+ *
+ * 官方权重只有 4 档（again/hard/good/easy → W[0..3]），本项目 UI 多一档 Perfect，
+ * 在 Easy 基础上再放大 1.5 倍，否则「秒答滚瓜烂熟」和 Easy 的首次间隔完全相同。
+ */
 function initStability(grade: Grade): number {
+  if (grade === 4) return Math.max(0.1, W[3] * 1.5);
   return Math.max(0.1, W[grade === 0 ? 0 : Math.min(grade, 3)]);
 }
 
@@ -47,9 +52,15 @@ function retrievability(days: number, stability: number): number {
   return Math.pow(1 + days / (9 * stability), -1);
 }
 
-/** 下一次到期间隔（保留 90% 记忆概率）*/
+/** 下一次到期间隔（保留 90% 记忆概率）
+ *
+ * 与上面的遗忘曲线 R(t)=(1+t/(9S))^-1 求逆：R=r 时 t = 9S(1/r − 1)，
+ * 于是 r=0.9 → 间隔正好等于 stability。
+ * 旧实现写成 `S/0.9 * (0.9^-2 − 1)` ≈ 0.26S，两条公式不是同一条曲线，
+ * 间隔被压到约 1/4，复习频率远高于声称的 90% 留存目标。
+ */
 function nextInterval(stability: number): number {
-  const days = (stability / 0.9) * (Math.pow(REQUEST_RETENTION, -1 / 0.5) - 1);
+  const days = 9 * stability * (1 / REQUEST_RETENTION - 1);
   return Math.min(MAX_INTERVAL_DAYS, Math.max(1, Math.round(days)));
 }
 

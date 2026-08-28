@@ -40,8 +40,22 @@ export async function saveDailyGoals(input: { newWords: number; ratio: number })
 /** 错词来源：翻卡 / 单词拼写 / 句子拼写 / 听写。 */
 export type MistakeSource = "study" | "spell" | "sentence" | "dictation";
 
-/** 用户对一张卡的评分 → 更新 SRS 状态；没记牢（Again/Hard 或拼写答错）同步收集进错词本，供 AI 小故事取材。 */
-export async function reviewWord(input: { wordId: string; grade: Grade; source?: MistakeSource; wrongAnswer?: string }) {
+/**
+ * 用户对一张卡的评分 → 更新 SRS 状态；真的答错才收集进错词本（供错词复习与 AI 小故事取材）。
+ *
+ * `mistake` 由调用方显式给出：拼写类模式传「是否拼错」，翻卡传「是否 Again」。
+ * 不传则回落到 grade===0。这样「拼对但看了提示」（降级为 Hard）不会被误记成错词。
+ *
+ * 注意：这里不做 revalidatePath —— 每张卡都刷一次会重跑整条今日队列，
+ * 还会把正在进行的会话队列算空。计数由会话结束时的 finishVocabSession 统一刷新。
+ */
+export async function reviewWord(input: {
+  wordId: string;
+  grade: Grade;
+  source?: MistakeSource;
+  wrongAnswer?: string;
+  mistake?: boolean;
+}) {
   const user = await requireUser();
   if (!user) return { ok: false as const, error: "未登录" };
 
@@ -87,8 +101,9 @@ export async function reviewWord(input: { wordId: string; grade: Grade; source?:
     });
   }
 
-  // 错词收集：没记牢的词进错词本（AI 小故事从这里取"每次错了的词"）
-  if (input.grade <= 1) {
+  // 错词收集：真的答错才进错词本（AI 小故事从这里取"每次错了的词"）
+  const isMistake = input.mistake ?? input.grade === 0;
+  if (isMistake) {
     const now = new Date();
     const wrongAnswer = input.wrongAnswer?.trim().slice(0, 100) || null;
     await prisma.mistakeWord.upsert({
@@ -108,10 +123,27 @@ export async function reviewWord(input: { wordId: string; grade: Grade; source?:
         ...(wrongAnswer ? { wrongAnswer } : {}),
       },
     });
+  } else if (input.grade >= 2) {
+    // 错词复习里答对 → 标记已掌握，错词本会自然收敛（与听写链路同口径）
+    await prisma.mistakeWord.updateMany({
+      where: { userId: user.id, wordId: input.wordId, mastered: false },
+      data: { mastered: true },
+    });
   }
 
+  return { ok: true as const, intervalDays: result.intervalDays, nextDue: result.dueAt.toISOString() };
+}
+
+/**
+ * 一轮背词会话结束后刷新受影响页面的计数（词汇首页 / 错词本 / 生词本 / Dashboard）。
+ *
+ * 单独拆出来是因为 next.config 开了 staleTimes.dynamic=30：不刷新的话返回词汇首页
+ * 最多 30 秒看到旧数字；而放在每张卡里刷又会打断会话（见 reviewWord 注释）。
+ */
+export async function finishVocabSession() {
   revalidatePath("/vocab");
   revalidatePath("/vocab/mistakes");
+  revalidatePath("/vocab/favorites");
   revalidatePath("/");
-  return { ok: true as const, intervalDays: result.intervalDays, nextDue: result.dueAt.toISOString() };
+  return { ok: true as const };
 }

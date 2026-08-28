@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { GRADE_LABELS, type Grade } from "@/lib/srs/fsrs";
-import { reviewWord } from "@/lib/vocab/actions";
+import { reviewWord, finishVocabSession } from "@/lib/vocab/actions";
 import { playWord } from "@/lib/audio/play";
 import { useCurrentWord } from "@/lib/vocab/current-word";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { SessionSummary } from "@/components/session-summary";
+import { EmptyQueue } from "@/components/vocab/empty-queue";
 import { Volume2, Eye } from "lucide-react";
 
 type Word = {
@@ -24,7 +25,7 @@ type Word = {
 
 type Item = { word: Word; isNew: boolean };
 
-export function StudyCard({ items }: { items: Item[] }) {
+export function StudyCard({ items, label }: { items: Item[]; label?: string | null }) {
   // 活动队列(支持"重点复习没记牢的"重开)
   const [queue, setQueue] = useState<Item[]>(items);
   const [idx, setIdx] = useState(0);
@@ -34,6 +35,7 @@ export function StudyCard({ items }: { items: Item[] }) {
   const [masteredCount, setMasteredCount] = useState(0);
   const [weakItems, setWeakItems] = useState<Item[]>([]);
   const [pending, start] = useTransition();
+  const finishedRef = useRef(false);
 
   // 注册当前词供 Ctrl+Q 收藏
   useCurrentWord(idx < queue.length ? queue[idx].word.id : null);
@@ -56,15 +58,29 @@ export function StudyCard({ items }: { items: Item[] }) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx, flipped, pending, queue.length]);
+
+  // 整轮结束才刷新计数（每张卡都刷会重跑今日队列、并打断会话）
+  const finished = queue.length > 0 && idx >= queue.length;
+  useEffect(() => {
+    if (!finished || finishedRef.current) return;
+    finishedRef.current = true;
+    void finishVocabSession();
+  }, [finished]);
 
   function restart(newQueue: Item[]) {
+    finishedRef.current = false;
     setQueue(newQueue);
     setIdx(0);
     setFlipped(false);
     setDone(0);
     setMasteredCount(0);
     setWeakItems([]);
+  }
+
+  if (queue.length === 0) {
+    return <EmptyQueue label={label} />;
   }
 
   if (idx >= queue.length) {
@@ -106,7 +122,8 @@ export function StudyCard({ items }: { items: Item[] }) {
   function grade(g: Grade) {
     start(async () => {
       try {
-        const res = await reviewWord({ wordId: item.word.id, grade: g, source: "study" });
+        // 只有 Again（完全不记得）才进错词本；Hard 算记得费劲，不算错
+        const res = await reviewWord({ wordId: item.word.id, grade: g, source: "study", mistake: g === 0 });
         if (!res.ok) {
           toast.error(res.error);
           return;

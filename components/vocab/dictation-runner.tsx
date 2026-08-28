@@ -19,7 +19,7 @@ export type DictationItem = {
   translations: { pos: string; meaning: string }[];
 };
 
-type Result = { wordId: string; spelling: string; wrongAnswer: string };
+type Result = { wordId: string; spelling: string; ok: boolean; wrongAnswer: string };
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -41,7 +41,8 @@ export function DictationRunner({
   const [correct, setCorrect] = useState(false);
   const [focused, setFocused] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
-  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const startAtRef = useRef(Date.now());
@@ -70,25 +71,41 @@ export function DictationRunner({
     return () => clearTimeout(t);
   }, [checked, correct]);
 
+  /** 提交本轮成绩；失败时留下 submitError，完成页给「重新提交」。 */
+  function submitResults(rows: Result[]) {
+    const duration = Math.round((Date.now() - startAtRef.current) / 1000);
+    const wrong = rows.filter((r) => !r.ok);
+    setSubmitted(true);
+    setSubmitError(null);
+    start(async () => {
+      try {
+        const res = await finishDictation({
+          scope,
+          scopeId,
+          total: items.length,
+          correct: rows.length - wrong.length,
+          duration,
+          mistakes: wrong.map((r) => ({ wordId: r.wordId, wrongAnswer: r.wrongAnswer })),
+          correctWordIds: scope === "mistakes" ? rows.filter((r) => r.ok).map((r) => r.wordId) : undefined,
+        });
+        if (!res.ok) {
+          setSubmitted(false);
+          setSubmitError(res.error);
+          toast.error(res.error);
+        }
+      } catch (err) {
+        const msg = (err as Error).message;
+        setSubmitted(false);
+        setSubmitError(msg);
+        toast.error("成绩提交失败：" + msg);
+      }
+    });
+  }
+
   // 结束：提交成绩
   useEffect(() => {
-    if (idx < items.length || submitting || items.length === 0) return;
-    const duration = Math.round((Date.now() - startAtRef.current) / 1000);
-    const wrong = results.filter((r) => r.wrongAnswer !== "");
-    const correctCount = results.length - wrong.length;
-    setSubmitting(true);
-    start(async () => {
-      const res = await finishDictation({
-        scope,
-        scopeId,
-        total: items.length,
-        correct: correctCount,
-        duration,
-        mistakes: wrong.map((r) => ({ wordId: r.wordId, wrongAnswer: r.wrongAnswer })),
-        correctWordIds: scope === "mistakes" ? results.filter((r) => r.wrongAnswer === "").map((r) => r.wordId) : undefined,
-      });
-      if (!res.ok) toast.error(res.error);
-    });
+    if (idx < items.length || submitted || submitError || items.length === 0) return;
+    submitResults(results);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx]);
 
@@ -105,7 +122,7 @@ export function DictationRunner({
   }
 
   if (!item) {
-    const wrong = results.filter((r) => r.wrongAnswer !== "");
+    const wrong = results.filter((r) => !r.ok);
     const rate = results.length > 0 ? Math.round(((results.length - wrong.length) / results.length) * 100) : 0;
     return (
       <div className="mx-auto max-w-2xl">
@@ -113,14 +130,20 @@ export function DictationRunner({
           title={`听写完成 · ${label}`}
           stats={[
             { value: `${results.length - wrong.length}/${results.length}`, label: `答对 · ${rate}%`, tone: "success" },
-            { value: wrong.length, label: "错词已收集", tone: wrong.length > 0 ? "orange" : "default" },
+            { value: wrong.length, label: submitError ? "错词待提交" : "错词已收集", tone: wrong.length > 0 ? "orange" : "default" },
             { value: results.length, label: "总词数" },
           ]}
         >
-          <Button asChild variant="outline">
-            <Link href="/vocab/dictation">再来一轮</Link>
-          </Button>
-          {wrong.length > 0 && (
+          {submitError ? (
+            <Button onClick={() => submitResults(results)} disabled={pending}>
+              {pending ? "提交中..." : "重新提交成绩"}
+            </Button>
+          ) : (
+            <Button asChild variant="outline">
+              <Link href="/vocab/dictation">再来一轮</Link>
+            </Button>
+          )}
+          {wrong.length > 0 && !submitError && (
             <Button asChild>
               <Link href="/vocab/mistakes">查看错词本</Link>
             </Button>
@@ -134,15 +157,16 @@ export function DictationRunner({
   }
 
   const progress = (idx / items.length) * 100;
-  const wrongCount = results.filter((r) => r.wrongAnswer !== "").length;
+  const wrongCount = results.filter((r) => !r.ok).length;
   const answered = results.length;
 
   const check = () => {
     if (checked || pending) return;
+    if (!value.trim()) return; // 空回车不判分（此前会被记成"答对"，正确率虚高）
     const ok = norm(value) === norm(item.spelling);
     setChecked(true);
     setCorrect(ok);
-    setResults((rs) => [...rs, { wordId: item.wordId, spelling: item.spelling, wrongAnswer: ok ? "" : value }]);
+    setResults((rs) => [...rs, { wordId: item.wordId, spelling: item.spelling, ok, wrongAnswer: ok ? "" : value }]);
     if (ok) playWord(item.spelling);
   };
 

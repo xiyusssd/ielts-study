@@ -4,16 +4,16 @@ import { useState, useTransition, useRef, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type { Grade } from "@/lib/srs/fsrs";
-import { reviewWord } from "@/lib/vocab/actions";
+import { reviewWord, finishVocabSession } from "@/lib/vocab/actions";
 import { playSentence } from "@/lib/audio/play";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { SessionSummary } from "@/components/session-summary";
 import { AnswerSheet } from "@/components/vocab/answer-sheet";
+import { EmptyQueue } from "@/components/vocab/empty-queue";
 import { normSentence } from "@/lib/text/word-diff";
 import { useCurrentWord } from "@/lib/vocab/current-word";
-import { Volume2, Flame, Eye, EyeOff, CornerDownLeft, Sparkles, Lightbulb } from "lucide-react";
+import { Volume2, Flame, Eye, EyeOff, CornerDownLeft, Sparkles } from "lucide-react";
 import { WordTTS } from "@/components/vocab/word-tts";
 
 type Word = {
@@ -26,7 +26,17 @@ type Word = {
 };
 type Item = { word: Word; isNew: boolean };
 
-export function SentenceCard({ items, aiEnabled = false }: { items: Item[]; aiEnabled?: boolean }) {
+export function SentenceCard({
+  items,
+  aiEnabled = false,
+  label,
+}: {
+  items: Item[];
+  aiEnabled?: boolean;
+  label?: string | null;
+}) {
+  // 会话队列在挂载时快照：服务端刷新会把今日队列算空，直接吃 props 会打断进行中的会话
+  const [initialItems] = useState<Item[]>(items);
   const [queue, setQueue] = useState<Item[]>(items);
   const [idx, setIdx] = useState(0);
   const [value, setValue] = useState("");
@@ -45,6 +55,7 @@ export function SentenceCard({ items, aiEnabled = false }: { items: Item[]; aiEn
   const [maxStreak, setMaxStreak] = useState(0);
   const [wrongItems, setWrongItems] = useState<Item[]>([]);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const finishedRef = useRef(false);
 
   // 注册当前词供 Ctrl+Q 收藏
   useCurrentWord(idx < queue.length ? queue[idx].word.id : null);
@@ -58,7 +69,16 @@ export function SentenceCard({ items, aiEnabled = false }: { items: Item[]; aiEn
     setUsedHint(false);
   }, [idx]);
 
+  // 整轮结束才刷新计数（每张卡都刷会重跑今日队列、并打断会话）
+  const finished = queue.length > 0 && idx >= queue.length;
+  useEffect(() => {
+    if (!finished || finishedRef.current) return;
+    finishedRef.current = true;
+    void finishVocabSession();
+  }, [finished]);
+
   function restart(newQueue: Item[]) {
+    finishedRef.current = false;
     setQueue(newQueue);
     setIdx(0);
     setDone(0);
@@ -74,17 +94,11 @@ export function SentenceCard({ items, aiEnabled = false }: { items: Item[]; aiEn
 
   if (queue.length === 0) {
     return (
-      <div className="mx-auto max-w-2xl">
-        <Card>
-          <CardContent className="space-y-4 p-8 text-center">
-            <h2 className="text-2xl font-bold">暂无可练句子</h2>
-            <p className="text-muted-foreground">当前队列里的词都没有例句，换翻卡或单词拼写试试。</p>
-            <Button asChild>
-              <Link href="/vocab">返回词汇首页</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <EmptyQueue
+        label={label}
+        title="暂无可练句子"
+        hint="当前队列里的词都没有例句，换翻卡或单词拼写试试。"
+      />
     );
   }
 
@@ -108,7 +122,7 @@ export function SentenceCard({ items, aiEnabled = false }: { items: Item[]; aiEn
             只练错题（{wrongItems.length}）
           </Button>
         )}
-        <Button onClick={() => restart(items)}>再来一轮</Button>
+        <Button onClick={() => restart(initialItems)}>再来一轮</Button>
       </SessionSummary>
     );
   }
@@ -158,6 +172,7 @@ export function SentenceCard({ items, aiEnabled = false }: { items: Item[]; aiEn
 
   function check() {
     if (checked || pending) return;
+    if (!value.trim()) return; // 空回车不判分（回车路径此前会直接记成答错）
     const ok = normSentence(value) === normSentence(example.en);
     setCorrect(ok);
     setChecked(true);
@@ -178,7 +193,14 @@ export function SentenceCard({ items, aiEnabled = false }: { items: Item[]; aiEn
     if (!correct) setWrongItems((w) => (w.some((x) => x.word.id === item.word.id) ? w : [...w, item]));
     start(async () => {
       try {
-        const res = await reviewWord({ wordId: item.word.id, grade, source: "sentence" });
+        const res = await reviewWord({
+          wordId: item.word.id,
+          grade,
+          source: "sentence",
+          // 整句拼对了（哪怕看过横线）就不该进错词本
+          mistake: !correct,
+          wrongAnswer: correct ? undefined : value,
+        });
         if (!res.ok) {
           toast.error(res.error);
           return;
@@ -331,8 +353,10 @@ export function SentenceCard({ items, aiEnabled = false }: { items: Item[]; aiEn
               <Button
                 type="button"
                 onClick={() => {
-                  setShowSkeleton((v) => !v);
-                  setUsedHint(true);
+                  const next = !showSkeleton;
+                  setShowSkeleton(next);
+                  // 只有把横线骨架「要回来」才算用了提示；主动隐藏是自加难度，不该罚分
+                  if (next) setUsedHint(true);
                 }}
                 variant="outline"
                 size="sm"
