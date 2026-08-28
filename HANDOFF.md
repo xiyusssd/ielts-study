@@ -1,3 +1,69 @@
+# ⭐⭐⭐ 最新状态(2026-08-28) · 修背词会话/统计口径 + 补词书入口 · 已重打包并装到 /Applications · 3 个 commit(未 push)
+
+本轮不是加功能，是把两条**用户会直接撞上的坏路径**修掉，顺带收窄了几处离谱的查询。
+
+## 1. 背词会话会被服务端刷新打断（最严重）
+
+`reviewWord` 每张卡都 `revalidatePath("/vocab"/"/vocab/mistakes"/"/")`。任何 revalidate 都会让 Next 顺带刷新**当前路由**的 RSC；刷新后的今日队列已不含刚过的词 → 队列每提交一张就短一格，而 `idx` 在涨，两者在半程相遇：
+
+- **单词拼写**（`SpellCard` 直接吃 `items` prop）走到约一半就弹「拼写练习完成」。
+- 翻卡/句子拼写把队列存进了 state，所以没被拖走，但每张卡都白跑一遍 `generateDailyQueue`（含 `id notIn` 全表扫 5031 行）。
+- study 页服务端还有个空状态早退：会话中途一旦刷新（Ctrl+Q 收藏也会），整张卡片被卸载、完成页被顶掉——这也是之前给句子模式打的那个补丁的根因。
+
+修法：`reviewWord` 不再 revalidate，改为整轮结束调一次 `finishVocabSession()`；三张卡统一在挂载时快照队列；空状态下移到卡片内部的 `EmptyQueue`，页面不再抢渲染权。
+
+## 2. 错词复习 / 生词本复习点进去永远是「暂无新词」
+
+`lib/srs/queue.ts` 的 scope 分支复用了「新词」逻辑，按 `learnedIds` 过滤。而错词**一定**已有 `VocabProgress` 行（拼错时 `reviewWord` 就建了），必然被过滤空；study 页又对显式筛选传 `reviewLimit: 0`，到期分支也取不到 → 两个入口从上线起就是空的。改为独立的 `scopeQueue()`：按范围直接排队，不看到期时间、不看是否学过。
+
+## 3. 判分口径
+
+- **单词听写空回车被算「答对」**：`Result.wrongAnswer` 用空串当「对」的哨兵，空输入正好等于空串 → 红字提示写着答错，统计里却是对的，错词也漏收。改用显式 `ok` 字段 + `check()` 空值守卫。
+- 单词/句子拼写的回车路径没有按钮那份 `disabled` 守卫，空回车直接判 0 分。
+- 拼对但用过提示（降级为 Hard）会被记进错词本 → `reviewWord` 新增显式 `mistake` 标记由调用方给定；答对时把该词的未掌握错词标为已掌握，错词本能收敛。
+- 句子拼写「隐藏横线」是自加难度，却被当成用了提示扣分。
+- 听写成绩提交失败原本是静默 unhandled rejection，现在 toast + 完成页「重新提交」。
+
+## 4. FSRS 间隔与自身遗忘曲线不自洽
+
+`nextInterval` 写成 `S/0.9 × (0.9^-2 − 1)` ≈ **0.26·S**，而曲线是 `R(t)=(1+t/9S)^-1`；复习频率约为设计值的 4 倍。按曲线求逆改为 `9S(1/0.9−1)`，90% 留存下间隔正好等于 S。Perfect 档初始 stability 不再等于 Easy。
+
+## 5. 统计口径：截断窗口冒充总数
+
+- `lib/dashboard/data.ts` 取 attempt 是 `orderBy asc + take 100`，既当计数又当趋势源。用户已做 **168** 次题 → 首页阅读/听力计数停在 100，Best band 与趋势曲线停更，streak 也只看最旧 100 条的日期。改为 `count`/`groupBy` 出计数与最高分，趋势另取最近 60 条。
+- streak 的日期键用的是 `toISOString()`（UTC），东八区凌晨学习被算到前一天而无故断签 → 改本地日期键；背单词也计入当日活动。
+- 阅读页拿「最近 20 条 attempt」当历史做题数与每篇 Best，听力页拿最近 50 条 → 都改 `groupBy(passageId)`。
+
+## 6. 查询瘦身 / 补入口 / 补限流
+
+- 阅读/听力列表页用 `include` 把 `Passage.content` 全拉出来（阅读 80 篇 ≈400KB）却只渲染标题，改 `select`。
+- 词汇首页为两个数字调 `generateDailyQueue` → 新增 `countDailyQueue`（count + NOT EXISTS）；20 次 `tags LIKE` 全表 COUNT 合并成一条 SQL 的 20 个 `SUM(CASE)`（`lib/vocab/tag-counts.ts`）。
+- `requireUser` 用 React `cache` 包一层（一次请求里布局/页面/各 action 会重复查 User）。
+- **单词详情页补「生词本 + 自建词书」入口**：词书页与生词本页都写着「在单词详情页加入」，但详情页从来没有控件，`addWordToBook` 全仓库零调用方。
+- `POST /api/speaking/session` 签发计费的 Realtime token，此前无限流（两个兄弟接口都有）→ 按用户 10 次/分钟。
+
+## 验证
+
+- `tsc --noEmit` 0 错误；`next build` 通过。
+- 冒烟 **13/13**：routes 32/32、vocab、vocab-modes、vocab-review、sentence、sentence-word、dictation、detail、assessment、audio、manual、reassess，加新增的 **`scripts/smoke-vocab-session.mjs`（11 项断言）**——它专门盯本轮四类回归：错词复习非空、会话不被刷新打断（含 Ctrl+Q 触发的刷新）、空回车不判分、阅读统计等于真实 attempt 数。
+- `e2e-full.mjs` 33/33；`e2e-vocab.mjs` 通过（能看到间隔修复：Good 后 +2 天、第二次 Good 后 +7 天）。
+- **dev server 别再用 3000**：本机 OrbStack 常驻 `*:3000`。本轮统一 `next dev -p 3007` + `BASE=http://127.0.0.1:3007`。
+
+## app 同步
+
+- `dist-electron/雅思学习助手-0.1.0-arm64.dmg` **341M**，已 ditto 装到 `/Applications`（677M，已去 quarantine）。
+- 实机：端口 43110、instanceId 匹配、launcher.log 干净；12 条路由全 200；`/login` 的 CSS 是 hash 文件且 200（没踩「dev 污染 .next 致 CSS 404 裸奔」）。
+- **数据零损失**：3 User / 5031 Word / 112 Passage / 168 Attempt / 53 VocabProgress / 2 WordBook / 2079 ChapterWord，与装包前逐项一致，悬空外键 0。
+
+## 遗留待办
+
+1. **未 push**：本轮 4 个 commit 未推。按本地记录的 `origin/main`（`35bcd1f`，未联网 fetch 核对）算，本地 `main` 领先 4 个。仓库 public，push 前必须走版权 stub 流程。
+2. 打包脚本的 `iconutil` 这次失败了（图标源从 :3000 的 Docker 实例抓的），沿用了 `build/icon.icns`（Aug 19），图标没变。想根治就在脚本里补一句校验源图尺寸。
+3. `smoke-routes` 冷启动第一次跑 `/settings` 可能 `status=0`（dev 首次编译超时），预热后 32/32；不是回归。
+4. 早先记录的 3 条仍在：`schema.prisma` 的 `@default(cuid())` 与 `lib/content/id.ts` 约定不一致、`extraResources` 的 `content` 目录在版权素材非空的机器上会被打包、`app/layout.tsx` 的 `metadataBase` 兜底还是 `http://localhost:3000`。
+
+---
+
 # ⭐⭐⭐ 最新状态(2026-07-31) · 修「端口冒充」致内容缺失 · 已重打包并装到 /Applications · 已全部 commit(未 push)
 
 **用户报「app 内容有问题/数据缺失」,根因不在业务代码,是启动器的端口与身份校验缺陷。**
