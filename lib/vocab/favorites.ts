@@ -18,6 +18,7 @@ export async function toggleFavorite(input: { wordId: string; note?: string }): 
   if (existing) {
     await prisma.favoriteWord.delete({ where: { id: existing.id } });
     revalidatePath("/vocab/favorites");
+    revalidatePath("/vocab"); // 首页生词本计数
     return { ok: true, added: false };
   }
 
@@ -36,5 +37,6 @@ export async function removeFavorite(input: { wordId: string }): Promise<{ ok: t
 
   await prisma.favoriteWord.deleteMany({ where: { userId: user.id, wordId: input.wordId } });
   revalidatePath("/vocab/favorites");
+  revalidatePath("/vocab"); // 首页生词本计数
   return { ok: true };
 }

@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft } from "lucide-react";
 import { WordTTS } from "@/components/vocab/word-tts";
 import { WordEnrich } from "@/components/vocab/word-enrich";
+import { FavoriteButton } from "@/components/vocab/favorite-button";
+import { AddToBook } from "@/components/vocab/add-to-book";
 import { etymologyOf, derivativesOf, parseStory } from "@/lib/vocab/format";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -40,9 +42,29 @@ export default async function WordDetailPage({ params }: { params: Promise<{ wor
   const word = await prisma.word.findUnique({ where: { id: wordId } });
   if (!word) notFound();
 
-  const progress = await prisma.vocabProgress.findUnique({
-    where: { userId_wordId: { userId: user.id, wordId: word.id } },
-  });
+  const [progress, favorite, customBooks] = await Promise.all([
+    prisma.vocabProgress.findUnique({
+      where: { userId_wordId: { userId: user.id, wordId: word.id } },
+    }),
+    prisma.favoriteWord.findUnique({
+      where: { userId_wordId: { userId: user.id, wordId: word.id } },
+      select: { id: true },
+    }),
+    prisma.wordBook.findMany({
+      where: { kind: "custom", userId: user.id },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        title: true,
+        chapters: { select: { words: { where: { wordId }, select: { id: true } } } },
+      },
+    }),
+  ]);
+  const bookChips = customBooks.map((b) => ({
+    id: b.id,
+    title: b.title,
+    has: b.chapters.some((c) => c.words.length > 0),
+  }));
 
   const translations = JSON.parse(word.translations) as { pos: string; meaning: string }[];
   const examples = JSON.parse(word.examples) as { en: string; zh: string }[];
@@ -81,6 +103,17 @@ export default async function WordDetailPage({ params }: { params: Promise<{ wor
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          <section className="flex flex-wrap items-start gap-x-6 gap-y-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+            <div>
+              <h3 className="mb-1.5 text-xs font-medium text-muted-foreground">生词本</h3>
+              <FavoriteButton wordId={word.id} initial={!!favorite} size="lg" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="mb-1.5 text-xs font-medium text-muted-foreground">收进自建词书</h3>
+              <AddToBook wordId={word.id} books={bookChips} />
+            </div>
+          </section>
+
           <section>
             <h3 className="mb-2 text-sm font-medium text-muted-foreground">释义</h3>
             <div className="space-y-1">

@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth/session";
 import { ai } from "@/lib/ai";
 import { friendlyAIError } from "@/lib/ai/errors";
 import { providerReady } from "@/lib/env";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * 签发 OpenAI Realtime API ephemeral token。
@@ -16,6 +17,15 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "Realtime provider 未配置。设置 OPENAI_API_KEY 后重启。" },
       { status: 400 },
+    );
+  }
+
+  // 每个 token 都对应一段计费的实时通话，按用户限流（同 /api/tts、/api/vocab/gen-sentence）
+  const rl = rateLimit(`realtime:${user.id}`, 10, 60_000); // 每人每分钟 10 次
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: `开启口语会话过于频繁，请 ${Math.ceil(rl.resetInMs / 1000)} 秒后再试` },
+      { status: 429 },
     );
   }
 

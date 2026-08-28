@@ -107,7 +107,9 @@ export async function addWordToBook(input: { bookId: string; wordId: string }): 
   await prisma.chapterWord.create({
     data: { chapterId: chapter.id, wordId: input.wordId, index: (last?.index ?? -1) + 1, freq: 0 },
   });
+  revalidatePath("/vocab/books"); // 列表页的「N 词」计数
   revalidatePath(`/vocab/books/${input.bookId}`);
+  revalidatePath(`/vocab/${input.wordId}`);
   return { ok: true };
 }
 
@@ -127,6 +129,8 @@ export async function removeWordFromBook(input: { bookId: string; wordId: string
       where: { chapterId: chapter.id, wordId: input.wordId },
     });
   }
+  revalidatePath("/vocab/books"); // 列表页的「N 词」计数
   revalidatePath(`/vocab/books/${input.bookId}`);
+  revalidatePath(`/vocab/${input.wordId}`);
   return { ok: true };
 }
