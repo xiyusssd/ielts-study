@@ -341,10 +341,10 @@ function buildEnv({ dataDir, port, instanceId, log = console.log }) {
     AI_STT_PROVIDER: "openai",
     AI_REALTIME_PROVIDER: "openai",
     OPENAI_BASE_URL: "https://api.openai.com/v1",
-    // 文本能力默认走 tokenrhythm 网关（OpenAI 兼容），设置页可在线换模型
-    OPENAI_TEXT_API_KEY: "sk_tr_wwuZY4zWOXT16fCTM0RdrCcxpFvezyF7i9ceuoYN4cU",
-    OPENAI_TEXT_BASE_URL: "https://tokenrhythm.studio/v1",
-    OPENAI_TEXT_MODEL: "deepseek-v4-flash",
+    // 发布包不内置凭据；由设置页或用户 .env 提供。
+    OPENAI_TEXT_API_KEY: "",
+    OPENAI_TEXT_BASE_URL: "https://api.openai.com/v1",
+    OPENAI_TEXT_MODEL: "gpt-4o",
     OPENAI_TTS_MODEL: "tts-1",
     OPENAI_STT_MODEL: "whisper-1",
     OPENAI_REALTIME_MODEL: "gpt-4o-realtime-preview",

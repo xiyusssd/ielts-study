@@ -29,6 +29,8 @@ mkdir -p build
 log "预生成数据库模板..."
 TEMPLATE_DB="build/template.db"
 rm -f "$TEMPLATE_DB"
+# Prisma 的 SQLite schema engine 需要已存在的目标文件。
+touch "$TEMPLATE_DB"
 ABS_DB="$PWD/$TEMPLATE_DB"
 
 DATABASE_URL="file:$ABS_DB" ./node_modules/.bin/prisma db push --skip-generate --schema=prisma/schema.prisma 2>&1 | tail -3
@@ -39,7 +41,12 @@ const p = new PrismaClient();
 p.user.count().then(c => { console.log('  template init:', c, 'users'); return p.\$disconnect(); });
 " 2>&1 | tail -2
 
-for s in seed-words seed-words-from-bank seed-passages seed-listening seed-writing seed-speaking seed-real-content build-book-vocab; do
+SEEDS="seed-words seed-words-from-bank seed-passages seed-listening seed-writing seed-speaking seed-real-content build-book-vocab"
+if [ "${PUBLIC_RELEASE:-0}" = "1" ]; then
+  # 公开安装包只附仓库内的示例内容，不导入本地真题或词典。
+  SEEDS="seed-words seed-passages seed-listening seed-writing seed-speaking"
+fi
+for s in $SEEDS; do
   DATABASE_URL="file:$ABS_DB" ./node_modules/.bin/tsx scripts/$s.ts 2>&1 | tail -1
 done
 DB_SIZE=$(du -h "$TEMPLATE_DB" | awk '{print $1}')

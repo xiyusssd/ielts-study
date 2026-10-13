@@ -11,6 +11,8 @@ An AI-powered IELTS preparation platform: a 5-dimension placement test feeds a p
 
 > ⚠️ 本仓库为**公开**仓库。剑桥真题 PDF/音频、剑桥词典等版权内容已通过 `.gitignore` 排除，请勿强行提交；本地如需完整数据请自行获取放入 `content/`。
 
+公开 macOS Release 使用 `PUBLIC_RELEASE=1 ./scripts/build-electron-app.sh`，在不含本地 `.env` 的干净源码副本中构建。公开包只附内置示例题库，不含剑桥真题、私人学习记录或 API Key。AI 功能需在设置中填写自己的凭据，或在 `~/Library/Application Support/雅思学习助手/.env` 中配置。构建后可用 `python3 scripts/check-public-package.py "dist-electron/mac-arm64/雅思学习助手.app"` 检查公开包。
+
 ## 功能总览
 
 | 模块 | 能力 |

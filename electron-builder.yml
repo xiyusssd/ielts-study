@@ -16,16 +16,27 @@ files:
 extraResources:
   - from: .next/standalone
     to: app
+    filter:
+      - "**/*"
+      - "!.env*"
+      - "!**/.env*"
+      - "!**/*.db"
+      - "!**/*.db-*"
   - from: .next/static
     to: app/.next/static
   - from: public
     to: app/public
+    filter:
+      - "**/*"
+      - "!audio/listening/c[4-9]-*.m4a"
+      - "!audio/listening/c1[1-6]-*.m4a"
   - from: prisma/schema.prisma
     to: app/prisma/schema.prisma
   - from: content
     to: app/content
     filter:
       - "**/*"
+      - "!parsed/**"
       - "!cambridge-pdfs/**"
       - "!audio/*.mp3"
   - from: build/template.db
